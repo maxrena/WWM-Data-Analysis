@@ -127,6 +127,25 @@ WWM Data Analysis/
    plot_distribution(df, 'defeated')
    ```
 
+## Deployment
+
+### Deploy to Render.com
+
+1. Fork or push this repository to GitHub
+
+2. Create a new Web Service on [Render.com](https://render.com)
+
+3. Connect your GitHub repository
+
+4. Use these settings:
+   - **Environment**: Python 3
+   - **Build Command**: `pip install -r requirements.txt && python scripts/download_fonts.py`
+   - **Start Command**: `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true`
+
+5. Deploy! Your app will be live at `https://your-app.onrender.com`
+
+**Note**: The `render.yaml` file is included for automatic configuration.
+
 ## Dashboard Pages
 
 ### 1. Overview
