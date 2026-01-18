@@ -190,7 +190,11 @@ The PDF export feature generates comprehensive reports including:
 
 ## Database Schema
 
-**yb_stats** (30 players)
+### Match History Tables
+
+**youngbuffalo_stats** (Master table with all match history)
+- id (INTEGER, PRIMARY KEY)
+- match_date (TEXT) - Format: YYYYMMDD
 - player_name (TEXT)
 - defeated (INTEGER)
 - assist (INTEGER)
@@ -201,8 +205,54 @@ The PDF export feature generates comprehensive reports including:
 - heal (INTEGER)
 - siege_damage (INTEGER)
 
-**enemy_stats** (31 players)
+**yb_stats** (View showing latest match)
+- Automatically shows data from the most recent match date
+- Maintains backward compatibility with existing code
+
+**yb_stats_YYYYMMDD** (Individual match tables)
+- One table per match date (e.g., yb_stats_20260118)
+- Contains the same columns as the view
+- Preserved for historical reference
+
+**enemy_stats** (Opponent team data)
+- player_name (TEXT)
+- defeated (INTEGER)
+- assist (INTEGER)
+- defeated_2 (INTEGER)
+- fun_coin (INTEGER)
+- damage (INTEGER)
+- tank (INTEGER)
+- heal (INTEGER)
+- siege_damage (INTEGER)
+
+**enemy_stats** (Opponent team data)
+- player_name (TEXT)
+- defeated (INTEGER)
+- assist (INTEGER)
+- defeated_2 (INTEGER)
+- fun_coin (INTEGER)
+- damage (INTEGER)
+- tank (INTEGER)
+- heal (INTEGER)
+- siege_damage (INTEGER)
+
+### Adding New Match Data
+
+To add a new match to the history:
+
+```powershell
+python scripts/add_match_data.py data/raw/new_match.csv 20260125
+```
+
+This will:
+- Add data to the master `youngbuffalo_stats` table
+- Create a date-specific table (e.g., `yb_stats_20260125`)
+- Update the `yb_stats` view to show the latest match
+
+**yb_stats_YYYYMMDD** (Individual match tables)
 - Same schema as yb_stats
+- One table per match date
+- Preserved for historical reference
 
 ## Available Modules
 
