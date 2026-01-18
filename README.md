@@ -1,0 +1,278 @@
+# WWM Data Analysis Project
+
+**Version 1.0**
+
+A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations and PDF reporting capabilities.
+
+## Project Structure
+
+```
+WWM Data Analysis/
+│
+├── data/
+│   ├── raw/                    # Raw CSV data files (player stats)
+│   └── analysis.db             # SQLite database
+│
+├── notebooks/                  # Jupyter notebooks for analysis
+│   ├── 01_exploratory_data_analysis.ipynb
+│   ├── player_stats_analysis.ipynb
+│   └── database_analysis.ipynb
+│
+├── src/                        # Source code modules
+│   ├── __init__.py
+│   ├── data_loader.py         # Data loading utilities
+│   ├── preprocessing.py       # Data preprocessing functions
+│   ├── visualization.py       # Visualization functions
+│   ├── statistics.py          # Statistical analysis tools
+│   ├── database.py            # Database management
+│   └── config.py              # Configuration settings
+│
+├── scripts/                    # Utility scripts
+│   ├── load_to_database.py    # Load CSV to database
+│   └── download_fonts.py      # Download Unicode fonts
+│
+├── fonts/                      # DejaVu Unicode fonts for PDF
+│
+├── outputs/                    # Output files
+│   ├── figures/               # Saved visualizations
+│   └── reports/               # Generated reports
+│
+├── app.py                     # Streamlit dashboard application
+├── requirements.txt           # Python dependencies
+├── .gitignore                # Git ignore rules
+├── .env.example              # Environment variables template
+└── README.md                 # This file
+```
+
+## Features
+
+- **Interactive Web Dashboard**: Streamlit-based UI with 5 different analysis views
+- **SQLite Database**: Efficient data storage with indexed queries
+- **Unicode Support**: Full support for Chinese and international characters
+- **PDF Export**: Generate comprehensive match reports with all statistics
+- **Data Visualization**: Interactive charts using Plotly
+- **Team Comparison**: Head-to-head analysis between YB Team and Enemy Team
+- **Player Rankings**: Overall rankings across both teams by various metrics
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.8 or higher
+- pip package manager
+
+### Installation
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/maxrena/WWM-Data-Analysis.git
+   cd WWM-Data-Analysis
+   ```
+
+2. Create a virtual environment (recommended):
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. Install required packages:
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+4. Download Unicode fonts for PDF support:
+   ```powershell
+   python scripts/download_fonts.py
+   ```
+
+### Running the Dashboard
+
+1. Start the Streamlit dashboard:
+   ```powershell
+   streamlit run app.py
+   ```
+
+2. Open your browser to `http://localhost:8501`
+
+3. Navigate through the different pages:
+   - **Overview**: Team statistics summary
+   - **YB Team Stats**: Detailed YB team analysis
+   - **Enemy Team Stats**: Detailed enemy team analysis
+   - **Head-to-Head Comparison**: Direct team comparisons
+   - **Player Rankings**: Overall player rankings
+
+4. Export PDF reports using the sidebar button
+
+### Quick Start
+
+### Quick Start
+
+1. Explore the data in Jupyter notebooks:
+   ```powershell
+   jupyter notebook
+   ```
+
+2. Load data into database:
+   ```powershell
+   python scripts/load_to_database.py
+   ```
+
+3. Or use the modules in your own scripts:
+   ```python
+   from src.database import DataAnalysisDB
+   from src.visualization import plot_distribution
+   
+   db = DataAnalysisDB()
+   df = db.query("SELECT * FROM yb_stats")
+   plot_distribution(df, 'defeated')
+   ```
+
+## Dashboard Pages
+
+### 1. Overview
+- Team size comparison
+- Total statistics (Defeated, Damage, Assists, Tank, Heal, Siege Damage)
+- Top performers from each team
+- Visual comparisons
+
+### 2. YB Team Stats
+- Top 10 players by Defeated and Damage
+- Team averages across all metrics
+- Distribution visualizations
+- Performance breakdowns
+
+### 3. Enemy Team Stats
+- Top 10 players by Defeated and Damage
+- Team averages across all metrics
+- Distribution visualizations
+- Performance breakdowns
+
+### 4. Head-to-Head Comparison
+- Direct metric comparisons
+- Combined top 10 players
+- Statistical analysis
+- Difference calculations
+
+### 5. Player Rankings
+- Top 20 overall players (combined teams)
+- Rank by any metric (Defeated, Damage, Assist, Tank, Heal, Siege Damage)
+- Team distribution in top rankings
+- Color-coded team identification
+
+## PDF Reports
+
+The PDF export feature generates comprehensive reports including:
+- Team overview with all metrics
+- Top 10 players from both teams
+- Average statistics comparison
+- Head-to-head total and average comparisons
+- Overall player rankings (Top 20 by Defeated, Top 10 by Damage)
+- Full Unicode support for international player names
+
+## Database Schema
+
+**yb_stats** (30 players)
+- player_name (TEXT)
+- defeated (INTEGER)
+- assist (INTEGER)
+- defeated_2 (INTEGER)
+- fun_coin (INTEGER)
+- damage (INTEGER)
+- tank (INTEGER)
+- heal (INTEGER)
+- siege_damage (INTEGER)
+
+**enemy_stats** (31 players)
+- Same schema as yb_stats
+
+## Available Modules
+
+### database.py
+- `DataAnalysisDB` - SQLite database management class
+- `query()` - Execute SELECT queries
+- `execute()` - Execute other SQL commands
+- `load_csv_to_table()` - Import CSV to database
+
+### data_loader.py
+- `load_csv()` - Load CSV files
+- `load_excel()` - Load Excel files
+- `save_processed_data()` - Save processed data
+
+### preprocessing.py
+- `handle_missing_values()` - Handle missing data
+- `remove_duplicates()` - Remove duplicate rows
+- `normalize_column()` - Normalize numerical columns
+- `encode_categorical()` - Encode categorical variables
+
+### visualization.py
+- `plot_distribution()` - Plot data distributions
+- `plot_correlation_matrix()` - Create correlation heatmaps
+- `plot_categorical_count()` - Count plots for categories
+- `plot_time_series()` - Time series visualizations
+- `plot_scatter()` - Scatter plots
+
+### statistics.py
+- `descriptive_statistics()` - Summary statistics
+- `test_normality()` - Test for normal distribution
+- `correlation_analysis()` - Correlation testing
+- `t_test_independent()` - Independent t-test
+- `anova_test()` - One-way ANOVA
+- `chi_square_test()` - Chi-square test
+
+### config.py
+- Database configuration
+- Application settings
+
+## Technology Stack
+
+- **Python 3.12**: Core programming language
+- **Streamlit 1.28+**: Web dashboard framework
+- **SQLite**: Lightweight database
+- **Pandas**: Data manipulation
+- **Plotly**: Interactive visualizations
+- **FPDF2**: PDF generation with Unicode support
+- **NumPy**: Numerical computing
+- **Matplotlib & Seaborn**: Statistical visualizations
+
+## Data Structure
+
+Player statistics include:
+- **Defeated**: Number of enemies defeated
+- **Damage**: Total damage dealt
+- **Assist**: Number of assists
+- **Tank**: Damage absorbed/tanked
+- **Heal**: Total healing done
+- **Siege Damage**: Damage to objectives
+- **Fun Coin**: In-game currency earned
+
+## Contributing
+
+Contributions are welcome! Please feel free to:
+- Report bugs
+- Suggest new features
+- Submit pull requests
+- Improve documentation
+
+## Version History
+
+### Version 1.0 (January 2026)
+- Initial release
+- Interactive Streamlit dashboard with 5 pages
+- SQLite database integration
+- PDF export with full Unicode support
+- Player rankings and team comparisons
+- 61 total players analyzed (30 YB, 31 Enemy)
+
+## License
+
+This project is provided as-is for educational and analytical purposes.
+
+## Author
+
+maxrena
+
+## Repository
+
+https://github.com/maxrena/WWM-Data-Analysis
+
+For questions or issues, please refer to the inline documentation in each module or the example notebook.
