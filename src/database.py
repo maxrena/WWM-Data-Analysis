@@ -24,8 +24,9 @@ class DataAnalysisDB:
         self.conn = None
         
     def connect(self):
-        """Establish database connection."""
-        self.conn = sqlite3.connect(self.db_path)
+        """Establish database connection with thread-safe settings."""
+        # Use check_same_thread=False for Streamlit compatibility
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         return self.conn
     
     def close(self):

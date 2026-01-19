@@ -1,6 +1,7 @@
 """
 WWM Data Analysis Dashboard
 Interactive web application for analyzing player statistics
+Version 2.0 - Added OCR extraction, clipboard paste, and match filtering
 """
 
 import streamlit as st
@@ -11,14 +12,191 @@ from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
 from datetime import datetime
-from fpdf import FPDF
 import io
 from PIL import Image
 import sqlite3
+import hashlib
+import re
+import numpy as np
+try:
+    import easyocr
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+from streamlit_paste_button import paste_image_button as pbutton
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent / 'src'))
 from database import DataAnalysisDB
+
+# Initialize EasyOCR reader (cached to avoid reloading)
+@st.cache_resource
+def get_ocr_reader():
+    """Initialize and cache EasyOCR reader"""
+    if OCR_AVAILABLE:
+        try:
+            # Initialize with English and Chinese support
+            reader = easyocr.Reader(['en', 'ch_sim'], gpu=False)
+            return reader
+        except Exception as e:
+            st.error(f"Error initializing OCR: {e}")
+            return None
+    return None
+
+# OCR Helper Function
+def extract_data_from_image(image):
+    """Extract player statistics from game screenshot using EasyOCR with spatial sorting"""
+    if not OCR_AVAILABLE:
+        return None, "EasyOCR is not installed. Please install with: pip install easyocr"
+    
+    reader = get_ocr_reader()
+    if reader is None:
+        return None, "Failed to initialize OCR reader"
+    
+    try:
+        # Convert PIL Image to numpy array for EasyOCR
+        img_array = np.array(image)
+        
+        # Image preprocessing for better OCR accuracy
+        # Convert to grayscale
+        from PIL import ImageEnhance
+        
+        # Enhance contrast to make numbers more visible
+        enhancer = ImageEnhance.Contrast(image)
+        enhanced_image = enhancer.enhance(2.0)
+        
+        # Enhance brightness
+        brightness_enhancer = ImageEnhance.Brightness(enhanced_image)
+        enhanced_image = brightness_enhancer.enhance(1.2)
+        
+        # Convert enhanced image to array
+        img_array = np.array(enhanced_image)
+        
+        # Perform OCR on the image with lower threshold
+        results = reader.readtext(img_array, paragraph=False, min_size=5)
+        
+        if not results:
+            return None, "No text detected in image. Please check image quality."
+        
+        # Extract detections with spatial coordinates
+        detections = []
+        for detection in results:
+            bbox, text, confidence = detection
+            if confidence > 0.1:  # Very low threshold to catch all numbers
+                # Calculate center Y and left X for sorting
+                y_coords = [point[1] for point in bbox]
+                x_coords = [point[0] for point in bbox]
+                center_y = sum(y_coords) / len(y_coords)
+                left_x = min(x_coords)
+                
+                detections.append({
+                    'text': text.strip(),
+                    'x': left_x,
+                    'y': center_y,
+                    'confidence': confidence
+                })
+        
+        # Sort detections by Y (top to bottom), then by X (left to right)
+        detections.sort(key=lambda d: (d['y'], d['x']))
+        
+        # Group detections into rows based on Y-coordinate proximity
+        rows = []
+        current_row = []
+        row_y_threshold = 30  # Increased tolerance for row grouping
+        
+        for det in detections:
+            if not current_row:
+                current_row.append(det)
+            else:
+                # Check if this detection is on the same row
+                avg_y = sum(d['y'] for d in current_row) / len(current_row)
+                if abs(det['y'] - avg_y) <= row_y_threshold:
+                    current_row.append(det)
+                else:
+                    # Start new row
+                    if current_row:
+                        # Sort current row by X coordinate (left to right)
+                        current_row.sort(key=lambda d: d['x'])
+                        rows.append(current_row)
+                    current_row = [det]
+        
+        # Add last row
+        if current_row:
+            current_row.sort(key=lambda d: d['x'])
+            rows.append(current_row)
+        
+        # Extract player data from rows
+        players_data = []
+        debug_info = []  # For debugging
+        
+        for i, row in enumerate(rows):
+            # Combine all text in the row
+            row_texts = [d['text'] for d in row]
+            row_combined = ' '.join(row_texts)
+            
+            # Extract all numbers from the row - be more aggressive
+            all_numbers = []
+            player_name_parts = []
+            
+            for text in row_texts:
+                # Clean text - remove spaces and special chars from numbers
+                cleaned = text.strip()
+                
+                # Try to extract as a whole number first
+                if cleaned.replace(',', '').replace('.', '').isdigit():
+                    # It's a pure number
+                    num = cleaned.replace(',', '').replace('.', '')
+                    all_numbers.append(num)
+                else:
+                    # Extract individual numbers from mixed text
+                    nums = re.findall(r'\d+', cleaned)
+                    if nums:
+                        all_numbers.extend(nums)
+                    
+                    # Extract non-numeric parts for player name
+                    non_numeric = re.sub(r'\d+', '', cleaned).strip()
+                    if non_numeric and len(non_numeric) > 1:
+                        player_name_parts.append(non_numeric)
+            
+            # Debug: collect row info
+            debug_info.append(f"Row {i+1}: {row_combined} | Numbers: {all_numbers} ({len(all_numbers)} found)")
+            
+            # More lenient: accept rows with at least 4 numbers (can pad the rest)
+            if len(all_numbers) >= 4:
+                player_name = ' '.join(player_name_parts).strip() if player_name_parts else f"Player_{len(players_data)+1}"
+                
+                # Ensure we have exactly 8 stat fields
+                while len(all_numbers) < 8:
+                    all_numbers.append('0')
+                
+                # Take first 8 numbers as stats
+                stats = all_numbers[:8]
+                
+                try:
+                    players_data.append({
+                        'player_name': player_name,
+                        'defeated': int(stats[0]),
+                        'assist': int(stats[1]),
+                        'defeated_2': int(stats[2]),
+                        'fun_coin': int(stats[3]),
+                        'damage': int(stats[4]),
+                        'tank': int(stats[5]),
+                        'heal': int(stats[6]),
+                        'siege_damage': int(stats[7])
+                    })
+                except (ValueError, IndexError) as e:
+                    debug_info.append(f"  ⚠️ Row {i+1} parsing error: {e}")
+                    continue
+        
+        if players_data:
+            return pd.DataFrame(players_data), None
+        else:
+            # Return debug info to help diagnose the issue
+            debug_msg = f"No valid player rows detected. Found {len(rows)} rows but none had enough stats (need 4+ numbers).\n\nDetected rows:\n" + "\n".join(debug_info)
+            return None, debug_msg
+    
+    except Exception as e:
+        return None, f"OCR Error: {str(e)}"
 
 # Page configuration
 st.set_page_config(
@@ -69,248 +247,96 @@ if 'enemy_data' not in st.session_state:
     st.session_state.enemy_data = None
 if 'match_id' not in st.session_state:
     st.session_state.match_id = None
+if 'selected_match_id' not in st.session_state:
+    st.session_state.selected_match_id = None
+if 'yb_pasted_images' not in st.session_state:
+    st.session_state.yb_pasted_images = []
+if 'enemy_pasted_images' not in st.session_state:
+    st.session_state.enemy_pasted_images = []
+if 'last_yb_paste_id' not in st.session_state:
+    st.session_state.last_yb_paste_id = None
+if 'last_enemy_paste_id' not in st.session_state:
+    st.session_state.last_enemy_paste_id = None
 
 # Initialize database connection
 @st.cache_resource
 def get_database():
+    """Get thread-safe database connection."""
     db = DataAnalysisDB('data/analysis.db')
     db.connect()
     return db
 
+# Get database instance
 db = get_database()
 
-# Load data
+# Load data with fresh connections to avoid thread issues
 @st.cache_data
-def load_yb_stats():
-    return db.query("SELECT * FROM yb_stats")
+def load_yb_stats(match_id=None):
+    """Load YB team stats with thread-safe connection."""
+    with DataAnalysisDB('data/analysis.db') as temp_db:
+        if match_id:
+            return temp_db.query(f"SELECT * FROM youngbuffalo_stats WHERE match_id = '{match_id}'")
+        return temp_db.query("SELECT * FROM yb_stats")
 
 @st.cache_data
-def load_enemy_stats():
-    return db.query("SELECT * FROM enemy_stats")
+def load_enemy_stats(match_id=None):
+    """Load enemy team stats with thread-safe connection."""
+    with DataAnalysisDB('data/analysis.db') as temp_db:
+        if match_id:
+            return temp_db.query(f"SELECT * FROM enemy_all_stats WHERE match_id = '{match_id}'")
+        return temp_db.query("SELECT * FROM enemy_stats")
+
+@st.cache_data
+@st.cache_data
+def get_available_matches():
+    """Get list of available match dates and IDs from database"""
+    with DataAnalysisDB('data/analysis.db') as temp_db:
+        query = """
+        SELECT DISTINCT match_id,
+               substr(match_id, 1, 4) || '-' || substr(match_id, 5, 2) || '-' || substr(match_id, 7, 2) || ' ' ||
+               substr(match_id, 10, 2) || ':' || substr(match_id, 12, 2) || ':' || substr(match_id, 14, 2) as match_datetime
+        FROM youngbuffalo_stats
+        ORDER BY match_id DESC
+        """
+        return temp_db.query(query)
 
 # Header
 st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.2</p>', unsafe_allow_html=True)
-
-# Main tabs
-tab1, tab2 = st.tabs(["📊 Dashboard", "📸 Data Extractor"])
-
-# ==================== DASHBOARD TAB ====================
-with tab1:
-
-# PDF Export Function
-def generate_pdf_report():
-    """Generate comprehensive PDF report of match statistics"""
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # Add Unicode font support - use absolute paths
-    fonts_dir = Path(__file__).parent / 'fonts'
-    pdf.add_font('DejaVu', '', str(fonts_dir / 'DejaVuSans.ttf'), uni=True)
-    pdf.add_font('DejaVu', 'B', str(fonts_dir / 'DejaVuSans-Bold.ttf'), uni=True)
-    
-    # Title
-    pdf.set_font('Arial', 'B', 20)
-    pdf.cell(0, 10, 'WWM Match Analysis Report', ln=True, align='C')
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 10, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='C')
-    pdf.ln(10)
-    
-    yb_df = load_yb_stats()
-    enemy_df = load_enemy_stats()
-    
-    # ===== OVERVIEW SECTION =====
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, '1. Team Overview', ln=True)
-    pdf.set_font('Arial', '', 10)
-    pdf.ln(5)
-    
-    pdf.cell(90, 8, 'Metric', 1)
-    pdf.cell(45, 8, 'YB Team', 1)
-    pdf.cell(45, 8, 'Enemy Team', 1, ln=True)
-    
-    metrics = [
-        ('Team Size', len(yb_df), len(enemy_df)),
-        ('Total Defeated', yb_df['defeated'].sum(), enemy_df['defeated'].sum()),
-        ('Total Damage', yb_df['damage'].sum(), enemy_df['damage'].sum()),
-        ('Total Assists', yb_df['assist'].sum(), enemy_df['assist'].sum()),
-        ('Total Tank', yb_df['tank'].sum(), enemy_df['tank'].sum()),
-        ('Total Heal', yb_df['heal'].sum(), enemy_df['heal'].sum()),
-        ('Total Siege Damage', yb_df['siege_damage'].sum(), enemy_df['siege_damage'].sum()),
-    ]
-    
-    for metric, yb_val, enemy_val in metrics:
-        pdf.cell(90, 8, metric, 1)
-        pdf.cell(45, 8, f'{yb_val:,}', 1)
-        pdf.cell(45, 8, f'{enemy_val:,}', 1, ln=True)
-    
-    pdf.ln(10)
-    
-    # ===== YB TEAM STATS SECTION =====
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, '2. YB Team Statistics', ln=True)
-    pdf.ln(5)
-    
-    # Top 10 YB Players by Defeated
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Top 10 Players by Defeated', ln=True)
-    pdf.set_font('Arial', 'B', 9)
-    
-    pdf.cell(55, 7, 'Player', 1)
-    pdf.cell(25, 7, 'Defeated', 1)
-    pdf.cell(30, 7, 'Damage', 1)
-    pdf.cell(25, 7, 'Assist', 1)
-    pdf.cell(25, 7, 'Tank', 1)
-    pdf.cell(20, 7, 'Heal', 1, ln=True)
-    
-    top_yb = yb_df.nlargest(10, 'defeated')
-    for _, row in top_yb.iterrows():
-        player_name = str(row['player_name'])[:20]
-        pdf.set_font('DejaVu', '', 9)
-        pdf.cell(55, 7, player_name, 1)
-        pdf.set_font('Arial', '', 9)
-        pdf.cell(25, 7, f"{int(row['defeated'])}", 1)
-        pdf.cell(30, 7, f"{int(row['damage']):,}", 1)
-        pdf.cell(25, 7, f"{int(row['assist'])}", 1)
-        pdf.cell(25, 7, f"{int(row['tank']):,}", 1)
-        pdf.cell(20, 7, f"{int(row['heal']):,}", 1, ln=True)
-    
-    pdf.ln(8)
-    
-    # YB Team Averages
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'YB Team Average Stats', ln=True)
-    pdf.set_font('Arial', '', 9)
-    
-    pdf.cell(60, 7, 'Metric', 1)
-    pdf.cell(40, 7, 'Average', 1, ln=True)
-    
-    for col in ['defeated', 'damage', 'assist', 'tank', 'heal', 'siege_damage']:
-        pdf.cell(60, 7, col.replace('_', ' ').title(), 1)
-        pdf.cell(40, 7, f"{yb_df[col].mean():,.2f}", 1, ln=True)
-    
-    pdf.add_page()
-    
-    # ===== ENEMY TEAM STATS SECTION =====
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, '3. Enemy Team Statistics', ln=True)
-    pdf.ln(5)
-    
-    # Top 10 Enemy Players by Defeated
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Top 10 Players by Defeated', ln=True)
-    pdf.set_font('Arial', 'B', 9)
-    
-    pdf.cell(55, 7, 'Player', 1)
-    pdf.cell(25, 7, 'Defeated', 1)
-    pdf.cell(30, 7, 'Damage', 1)
-    pdf.cell(25, 7, 'Assist', 1)
-    pdf.cell(25, 7, 'Tank', 1)
-    pdf.cell(20, 7, 'Heal', 1, ln=True)
-    
-    top_enemy = enemy_df.nlargest(10, 'defeated')
-    for _, row in top_enemy.iterrows():
-        player_name = str(row['player_name'])[:20]
-        pdf.set_font('DejaVu', '', 9)
-        pdf.cell(55, 7, player_name, 1)
-        pdf.set_font('Arial', '', 9)
-        pdf.cell(25, 7, f"{int(row['defeated'])}", 1)
-        pdf.cell(30, 7, f"{int(row['damage']):,}", 1)
-        pdf.cell(25, 7, f"{int(row['assist'])}", 1)
-        pdf.cell(25, 7, f"{int(row['tank']):,}", 1)
-        pdf.cell(20, 7, f"{int(row['heal']):,}", 1, ln=True)
-    
-    pdf.ln(8)
-    
-    # Enemy Team Averages
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Enemy Team Average Stats', ln=True)
-    pdf.set_font('Arial', '', 9)
-    
-    pdf.cell(60, 7, 'Metric', 1)
-    pdf.cell(40, 7, 'Average', 1, ln=True)
-    
-    for col in ['defeated', 'damage', 'assist', 'tank', 'heal', 'siege_damage']:
-        pdf.cell(60, 7, col.replace('_', ' ').title(), 1)
-        pdf.cell(40, 7, f"{enemy_df[col].mean():,.2f}", 1, ln=True)
-    
-    pdf.ln(10)
-    
-    # ===== HEAD-TO-HEAD COMPARISON SECTION =====
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, '4. Head-to-Head Comparison', ln=True)
-    pdf.ln(5)
-    
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Total Stats Comparison', ln=True)
-    pdf.set_font('Arial', '', 9)
-    
-    pdf.cell(60, 7, 'Metric', 1)
-    pdf.cell(35, 7, 'YB Team', 1)
-    pdf.cell(35, 7, 'Enemy Team', 1)
-    pdf.cell(35, 7, 'Difference', 1, ln=True)
-    
-    metrics_compare = ['defeated', 'damage', 'assist', 'tank', 'heal', 'siege_damage']
-    for metric in metrics_compare:
-        yb_total = yb_df[metric].sum()
-        enemy_total = enemy_df[metric].sum()
-        diff = yb_total - enemy_total
-        
-        pdf.cell(60, 7, metric.replace('_', ' ').title(), 1)
-        pdf.cell(35, 7, f"{yb_total:,.0f}", 1)
-        pdf.cell(35, 7, f"{enemy_total:,.0f}", 1)
-        pdf.cell(35, 7, f"{diff:+,.0f}", 1, ln=True)
-    
-    pdf.ln(8)
-    
-    # Average Comparison
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Average Stats Comparison', ln=True)
-    pdf.set_font('Arial', '', 9)
-    
-    pdf.cell(60, 7, 'Metric', 1)
-    pdf.cell(35, 7, 'YB Team', 1)
-    pdf.cell(35, 7, 'Enemy Team', 1)
-    pdf.cell(35, 7, 'Difference', 1, ln=True)
-    
-    for metric in metrics_compare:
-        yb_avg = yb_df[metric].mean()
-        enemy_avg = enemy_df[metric].mean()
-        diff = yb_avg - enemy_avg
-        
-        pdf.cell(60, 7, metric.replace('_', ' ').title(), 1)
-        pdf.cell(35, 7, f"{yb_avg:.2f}", 1)
-        pdf.cell(35, 7, f"{enemy_avg:.2f}", 1)
-        pdf.cell(35, 7, f"{diff:+.2f}", 1, ln=True)
-    
-    # Footer
-    pdf.ln(15)
-    pdf.set_font('Arial', 'I', 8)
-    pdf.cell(0, 10, 'End of Report', ln=True, align='C')
-    
-    # Return PDF as bytes
-    return bytes(pdf.output())
 
 # Sidebar
 st.sidebar.title("🎮 WWM Data Analysis v1.2")
 st.sidebar.divider()
 
-# PDF Export Button
-st.sidebar.subheader("📄 Export")
-if st.sidebar.button("📥 Download PDF Report", use_container_width=True):
-    try:
-        pdf_bytes = generate_pdf_report()
-        st.sidebar.download_button(
-            label="💾 Save PDF",
-            data=pdf_bytes,
-            file_name=f"wwm_match_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-        st.sidebar.success("✅ PDF ready for download!")
-    except Exception as e:
-        st.sidebar.error(f"Error generating PDF: {e}")
+# Match selector in sidebar
+st.sidebar.subheader("📅 Match Selection")
+available_matches = get_available_matches()
 
-# Create tabs
+if len(available_matches) > 0:
+    match_options = ["Latest Match (All Data)"] + [
+        f"{row['match_datetime']}" for _, row in available_matches.iterrows()
+    ]
+    
+    selected_option = st.sidebar.selectbox(
+        "Select Match to View",
+        match_options,
+        help="Choose a specific match or view all latest data"
+    )
+    
+    if selected_option == "Latest Match (All Data)":
+        st.session_state.selected_match_id = None
+        st.sidebar.info("📊 Viewing latest data from all matches")
+    else:
+        # Extract match_id from the selected datetime string
+        selected_index = match_options.index(selected_option) - 1
+        st.session_state.selected_match_id = available_matches.iloc[selected_index]['match_id']
+        st.sidebar.success(f"🎯 Viewing Match: {st.session_state.selected_match_id}")
+else:
+    st.sidebar.warning("⚠️ No matches found in database")
+    st.session_state.selected_match_id = None
+
+st.sidebar.divider()
+
+# Main tabs
 main_tab, extractor_tab = st.tabs(["📊 Dashboard", "📸 Data Extractor"])
 
 # ==================== DASHBOARD TAB ====================
@@ -323,303 +349,320 @@ with main_tab:
 
     # Overview Page
     if page == "Overview":
-    st.header("📊 Match Overview")
-    
-    yb_df = load_yb_stats()
-    enemy_df = load_enemy_stats()
-    
-    # Key Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "YB Team Size",
-            len(yb_df),
-            delta=None
-        )
-    
-    with col2:
-        st.metric(
-            "Enemy Team Size",
-            len(enemy_df),
-            delta=None
-        )
-    
-    with col3:
-        yb_total_defeated = yb_df['defeated'].sum()
-        enemy_total_defeated = enemy_df['defeated'].sum()
-        st.metric(
-            "YB Total Defeated",
-            yb_total_defeated,
-            delta=f"{yb_total_defeated - enemy_total_defeated:+d} vs Enemy"
-        )
-    
-    with col4:
-        yb_total_damage = yb_df['damage'].sum()
-        enemy_total_damage = enemy_df['damage'].sum()
-        st.metric(
-            "YB Total Damage",
-            f"{yb_total_damage:,}",
-            delta=f"{((yb_total_damage - enemy_total_damage) / enemy_total_damage * 100):+.1f}%"
-        )
-    
-    st.divider()
-    
-    # Team Comparison Charts
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🎯 Total Defeated Comparison")
-        comparison_data = pd.DataFrame({
-            'Team': ['YB Team', 'Enemy Team'],
-            'Total Defeated': [yb_total_defeated, enemy_total_defeated]
-        })
-        fig = px.bar(
-            comparison_data,
-            x='Team',
-            y='Total Defeated',
-            color='Team',
-            color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
-            text='Total Defeated'
-        )
-        fig.update_traces(textposition='outside')
-        fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("💥 Total Damage Comparison")
-        comparison_data = pd.DataFrame({
-            'Team': ['YB Team', 'Enemy Team'],
-            'Total Damage': [yb_total_damage, enemy_total_damage]
-        })
-        fig = px.bar(
-            comparison_data,
-            x='Team',
-            y='Total Damage',
-            color='Team',
-            color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
-            text='Total Damage'
-        )
-        fig.update_traces(textposition='outside', texttemplate='%{text:,}')
-        fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Average Stats
-    st.subheader("📈 Average Player Statistics")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**YB Team Averages**")
-        yb_avg = yb_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
-        st.dataframe(yb_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
-    
-    with col2:
-        st.write("**Enemy Team Averages**")
-        enemy_avg = enemy_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
-        st.dataframe(enemy_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
+        st.header("📊 Match Overview")
+        
+        yb_df = load_yb_stats(st.session_state.selected_match_id)
+        enemy_df = load_enemy_stats(st.session_state.selected_match_id)
+        
+        # Check if data exists
+        if len(yb_df) == 0 and len(enemy_df) == 0:
+            st.warning("⚠️ No data found for the selected match. Please select a different match or add data using the Data Extractor.")
+            st.stop()
+        
+        # Key Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "YB Team Size",
+                len(yb_df),
+                delta=None
+            )
+        
+        with col2:
+            st.metric(
+                "Enemy Team Size",
+                len(enemy_df),
+                delta=None
+            )
+        
+        with col3:
+            yb_total_defeated = yb_df['defeated'].sum()
+            enemy_total_defeated = enemy_df['defeated'].sum()
+            st.metric(
+                "YB Total Defeated",
+                yb_total_defeated,
+                delta=f"{yb_total_defeated - enemy_total_defeated:+d} vs Enemy"
+            )
+        
+        with col4:
+            yb_total_damage = yb_df['damage'].sum()
+            enemy_total_damage = enemy_df['damage'].sum()
+            st.metric(
+                "YB Total Damage",
+                f"{yb_total_damage:,}",
+                delta=f"{((yb_total_damage - enemy_total_damage) / enemy_total_damage * 100):+.1f}%"
+            )
+        
+        st.divider()
+        
+        # Team Comparison Charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🎯 Total Defeated Comparison")
+            comparison_data = pd.DataFrame({
+                'Team': ['YB Team', 'Enemy Team'],
+                'Total Defeated': [yb_total_defeated, enemy_total_defeated]
+            })
+            fig = px.bar(
+                comparison_data,
+                x='Team',
+                y='Total Defeated',
+                color='Team',
+                color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
+                text='Total Defeated'
+            )
+            fig.update_traces(textposition='outside')
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("💥 Total Damage Comparison")
+            comparison_data = pd.DataFrame({
+                'Team': ['YB Team', 'Enemy Team'],
+                'Total Damage': [yb_total_damage, enemy_total_damage]
+            })
+            fig = px.bar(
+                comparison_data,
+                x='Team',
+                y='Total Damage',
+                color='Team',
+                color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
+                text='Total Damage'
+            )
+            fig.update_traces(textposition='outside', texttemplate='%{text:,}')
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Average Stats
+        st.subheader("📈 Average Player Statistics")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**YB Team Averages**")
+            yb_avg = yb_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
+            st.dataframe(yb_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
+        
+        with col2:
+            st.write("**Enemy Team Averages**")
+            enemy_avg = enemy_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
+            st.dataframe(enemy_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
 
     # YB Team Stats Page
     elif page == "YB Team Stats":
-    st.header("🟢 YB Team Statistics")
-    
-    yb_df = load_yb_stats()
-    
-    # Top performers
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.subheader("🏆 Top by Defeated")
-        top_defeated = yb_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
-        st.dataframe(top_defeated, hide_index=True, use_container_width=True)
-    
-    with col2:
-        st.subheader("💥 Top by Damage")
-        top_damage = yb_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
-        st.dataframe(top_damage, hide_index=True, use_container_width=True)
-    
-    with col3:
-        st.subheader("🤝 Top by Assist")
-        top_assist = yb_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
-        st.dataframe(top_assist, hide_index=True, use_container_width=True)
-    
-    st.divider()
-    
-    # Visualizations
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Defeated Distribution")
-        fig = px.histogram(yb_df, x='defeated', nbins=20, color_discrete_sequence=['#2ecc71'])
-        fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Damage vs Defeated")
-        fig = px.scatter(
-            yb_df,
-            x='defeated',
-            y='damage',
-            hover_data=['player_name'],
-            color='defeated',
-            size='damage',
-            color_continuous_scale='Greens'
+        st.header("🟢 YB Team Statistics")
+        
+        yb_df = load_yb_stats(st.session_state.selected_match_id)
+        
+        if len(yb_df) == 0:
+            st.warning("⚠️ No YB Team data found for the selected match.")
+            st.stop()
+        
+        # Top performers
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.subheader("🏆 Top by Defeated")
+            top_defeated = yb_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
+            st.dataframe(top_defeated, hide_index=True, use_container_width=True)
+        
+        with col2:
+            st.subheader("💥 Top by Damage")
+            top_damage = yb_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
+            st.dataframe(top_damage, hide_index=True, use_container_width=True)
+        
+        with col3:
+            st.subheader("🤝 Top by Assist")
+            top_assist = yb_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
+            st.dataframe(top_assist, hide_index=True, use_container_width=True)
+        
+        st.divider()
+        
+        # Visualizations
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Defeated Distribution")
+            fig = px.histogram(yb_df, x='defeated', nbins=20, color_discrete_sequence=['#2ecc71'])
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("Damage vs Defeated")
+            fig = px.scatter(
+                yb_df,
+                x='defeated',
+                y='damage',
+                hover_data=['player_name'],
+                color='defeated',
+                size='damage',
+                color_continuous_scale='Greens'
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Full data table
+        st.subheader("📋 Complete Team Stats")
+        st.dataframe(
+            yb_df.sort_values('defeated', ascending=False),
+            hide_index=True,
+            use_container_width=True,
+            height=400
         )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Full data table
-    st.subheader("📋 Complete Team Stats")
-    st.dataframe(
-        yb_df.sort_values('defeated', ascending=False),
-        hide_index=True,
-        use_container_width=True,
-        height=400
-    )
 
     # Enemy Team Stats Page
     elif page == "Enemy Team Stats":
-    st.header("🔴 Enemy Team Statistics")
-    
-    enemy_df = load_enemy_stats()
-    
-    # Top performers
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.subheader("🏆 Top by Defeated")
-        top_defeated = enemy_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
-        st.dataframe(top_defeated, hide_index=True, use_container_width=True)
-    
-    with col2:
-        st.subheader("💥 Top by Damage")
-        top_damage = enemy_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
-        st.dataframe(top_damage, hide_index=True, use_container_width=True)
-    
-    with col3:
-        st.subheader("🤝 Top by Assist")
-        top_assist = enemy_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
-        st.dataframe(top_assist, hide_index=True, use_container_width=True)
-    
-    st.divider()
-    
-    # Visualizations
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Defeated Distribution")
-        fig = px.histogram(enemy_df, x='defeated', nbins=20, color_discrete_sequence=['#e74c3c'])
-        fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Damage vs Defeated")
-        fig = px.scatter(
-            enemy_df,
-            x='defeated',
-            y='damage',
-            hover_data=['player_name'],
-            color='defeated',
-            size='damage',
-            color_continuous_scale='Reds'
+        st.header("🔴 Enemy Team Statistics")
+        
+        enemy_df = load_enemy_stats(st.session_state.selected_match_id)
+        
+        if len(enemy_df) == 0:
+            st.warning("⚠️ No Enemy Team data found for the selected match.")
+            st.stop()
+        
+        # Top performers
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.subheader("🏆 Top by Defeated")
+            top_defeated = enemy_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
+            st.dataframe(top_defeated, hide_index=True, use_container_width=True)
+        
+        with col2:
+            st.subheader("💥 Top by Damage")
+            top_damage = enemy_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
+            st.dataframe(top_damage, hide_index=True, use_container_width=True)
+        
+        with col3:
+            st.subheader("🤝 Top by Assist")
+            top_assist = enemy_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
+            st.dataframe(top_assist, hide_index=True, use_container_width=True)
+        
+        st.divider()
+        
+        # Visualizations
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Defeated Distribution")
+            fig = px.histogram(enemy_df, x='defeated', nbins=20, color_discrete_sequence=['#e74c3c'])
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("Damage vs Defeated")
+            fig = px.scatter(
+                enemy_df,
+                x='defeated',
+                y='damage',
+                hover_data=['player_name'],
+                color='defeated',
+                size='damage',
+                color_continuous_scale='Reds'
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Full data table
+        st.subheader("📋 Complete Team Stats")
+        st.dataframe(
+            enemy_df.sort_values('defeated', ascending=False),
+            hide_index=True,
+            use_container_width=True,
+            height=400
         )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Full data table
-    st.subheader("📋 Complete Team Stats")
-    st.dataframe(
-        enemy_df.sort_values('defeated', ascending=False),
-        hide_index=True,
-        use_container_width=True,
-        height=400
-    )
 
     # Head-to-Head Comparison Page
     elif page == "Head-to-Head Comparison":
-    st.header("⚔️ Head-to-Head Analysis")
-    
-    yb_df = load_yb_stats()
-    enemy_df = load_enemy_stats()
-    
-    # Select metric for comparison
-    metric = st.selectbox(
-        "Select Metric to Compare",
-        ["defeated", "damage", "assist", "tank", "heal", "siege_damage"]
-    )
-    
-    # Top 10 from each team
-    yb_top = yb_df.nlargest(10, metric)[['player_name', metric]].copy()
-    yb_top['team'] = 'YB Team'
-    
-    enemy_top = enemy_df.nlargest(10, metric)[['player_name', metric]].copy()
-    enemy_top['team'] = 'Enemy Team'
-    
-    combined = pd.concat([yb_top, enemy_top])
-    
-    # Bar chart comparison
-    fig = px.bar(
-        combined,
-        x=metric,
-        y='player_name',
-        color='team',
-        orientation='h',
-        color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
-        title=f'Top 10 Players by {metric.replace("_", " ").title()}'
-    )
-    fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Statistical comparison
-    st.subheader("📊 Statistical Comparison")
-    
-    col1, col2 = st.columns(2)
-    
-    metrics_to_compare = ['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']
-    
-    comparison_data = []
-    for m in metrics_to_compare:
-        comparison_data.append({
-            'Metric': m.replace('_', ' ').title(),
-            'YB Team': yb_df[m].sum(),
-            'Enemy Team': enemy_df[m].sum(),
-            'Difference': yb_df[m].sum() - enemy_df[m].sum()
-        })
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    
-    with col1:
-        st.write("**Total Comparison**")
-        st.dataframe(
-            comparison_df.style.format({
-                'YB Team': '{:,.0f}',
-                'Enemy Team': '{:,.0f}',
-                'Difference': '{:+,.0f}'
-            }),
-            hide_index=True,
-            use_container_width=True
+        st.header("⚔️ Head-to-Head Analysis")
+        
+        yb_df = load_yb_stats(st.session_state.selected_match_id)
+        enemy_df = load_enemy_stats(st.session_state.selected_match_id)
+        
+        if len(yb_df) == 0 or len(enemy_df) == 0:
+            st.warning("⚠️ Insufficient data for head-to-head comparison.")
+            st.stop()
+        
+        # Select metric for comparison
+        metric = st.selectbox(
+            "Select Metric to Compare",
+            ["defeated", "damage", "assist", "tank", "heal", "siege_damage"]
         )
-    
-    with col2:
-        st.write("**Average Comparison**")
-        avg_comparison_data = []
+        
+        # Top 10 from each team
+        yb_top = yb_df.nlargest(10, metric)[['player_name', metric]].copy()
+        yb_top['team'] = 'YB Team'
+        
+        enemy_top = enemy_df.nlargest(10, metric)[['player_name', metric]].copy()
+        enemy_top['team'] = 'Enemy Team'
+        
+        combined = pd.concat([yb_top, enemy_top])
+        
+        # Bar chart comparison
+        fig = px.bar(
+            combined,
+            x=metric,
+            y='player_name',
+            color='team',
+            orientation='h',
+            color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'},
+            title=f'Top 10 Players by {metric.replace("_", " ").title()}'
+        )
+        fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Statistical comparison
+        st.subheader("📊 Statistical Comparison")
+        
+        col1, col2 = st.columns(2)
+        
+        metrics_to_compare = ['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']
+        
+        comparison_data = []
         for m in metrics_to_compare:
-            avg_comparison_data.append({
+            comparison_data.append({
                 'Metric': m.replace('_', ' ').title(),
-                'YB Team': yb_df[m].mean(),
-                'Enemy Team': enemy_df[m].mean(),
-                'Difference': yb_df[m].mean() - enemy_df[m].mean()
+                'YB Team': yb_df[m].sum(),
+                'Enemy Team': enemy_df[m].sum(),
+                'Difference': yb_df[m].sum() - enemy_df[m].sum()
             })
         
-        avg_comparison_df = pd.DataFrame(avg_comparison_data)
-        st.dataframe(
-            avg_comparison_df.style.format({
-                'YB Team': '{:.2f}',
-                'Enemy Team': '{:.2f}',
-                'Difference': '{:+.2f}'
-            }),
-            hide_index=True,
-            use_container_width=True
-        )
+        comparison_df = pd.DataFrame(comparison_data)
+        
+        with col1:
+            st.write("**Total Comparison**")
+            st.dataframe(
+                comparison_df.style.format({
+                    'YB Team': '{:,.0f}',
+                    'Enemy Team': '{:,.0f}',
+                    'Difference': '{:+,.0f}'
+                }),
+                hide_index=True,
+                use_container_width=True
+            )
+        
+        with col2:
+            st.write("**Average Comparison**")
+            avg_comparison_data = []
+            for m in metrics_to_compare:
+                avg_comparison_data.append({
+                    'Metric': m.replace('_', ' ').title(),
+                    'YB Team': yb_df[m].mean(),
+                    'Enemy Team': enemy_df[m].mean(),
+                    'Difference': yb_df[m].mean() - enemy_df[m].mean()
+                })
+            
+            avg_comparison_df = pd.DataFrame(avg_comparison_data)
+            st.dataframe(
+                avg_comparison_df.style.format({
+                    'YB Team': '{:.2f}',
+                    'Enemy Team': '{:.2f}',
+                    'Difference': '{:+.2f}'
+                }),
+                hide_index=True,
+                use_container_width=True
+            )
 
 
 # ==================== DATA EXTRACTOR TAB ====================
@@ -667,6 +710,47 @@ with extractor_tab:
         with col_yb:
             st.subheader("🟢 My Team (YoungBuffalo)")
             
+            # Clipboard paste button
+            st.write("📋 **Paste from Clipboard:**")
+            col_paste, col_clear = st.columns([3, 1])
+            
+            with col_paste:
+                paste_result = pbutton(
+                    label="📸 Paste Image",
+                    key="yb_paste",
+                    errors="ignore"
+                )
+            
+            with col_clear:
+                if st.button("🗑️ Clear All", key="yb_clear"):
+                    st.session_state.yb_pasted_images = []
+                    st.rerun()
+            
+            if paste_result.image_data is not None:
+                # Check if this is a new paste by comparing image hash
+                img_bytes = io.BytesIO()
+                paste_result.image_data.save(img_bytes, format='PNG')
+                img_hash = hashlib.md5(img_bytes.getvalue()).hexdigest()
+                
+                if img_hash != st.session_state.last_yb_paste_id:
+                    st.session_state.yb_pasted_images.append(paste_result.image_data)
+                    st.session_state.last_yb_paste_id = img_hash
+                    st.success(f"✅ Image pasted! Total: {len(st.session_state.yb_pasted_images)} image(s)")
+                    st.rerun()
+            
+            # Show all pasted images
+            if len(st.session_state.yb_pasted_images) > 0:
+                with st.expander(f"Preview Pasted Images ({len(st.session_state.yb_pasted_images)})"):
+                    for i, img in enumerate(st.session_state.yb_pasted_images):
+                        col_img, col_del = st.columns([5, 1])
+                        with col_img:
+                            st.image(img, caption=f"Pasted Image {i+1}", use_container_width=True)
+                        with col_del:
+                            if st.button("❌", key=f"del_yb_{i}"):
+                                st.session_state.yb_pasted_images.pop(i)
+                                st.rerun()
+            
+            st.write("📁 **Or Upload Files:**")
             yb_files = st.file_uploader(
                 "Upload YB Team Screenshots",
                 type=['png', 'jpg', 'jpeg'],
@@ -708,6 +792,47 @@ with extractor_tab:
         with col_enemy:
             st.subheader("🔴 Enemy Team")
             
+            # Clipboard paste button
+            st.write("📋 **Paste from Clipboard:**")
+            col_paste_e, col_clear_e = st.columns([3, 1])
+            
+            with col_paste_e:
+                paste_result_enemy = pbutton(
+                    label="📸 Paste Image",
+                    key="enemy_paste",
+                    errors="ignore"
+                )
+            
+            with col_clear_e:
+                if st.button("🗑️ Clear All", key="enemy_clear"):
+                    st.session_state.enemy_pasted_images = []
+                    st.rerun()
+            
+            if paste_result_enemy.image_data is not None:
+                # Check if this is a new paste by comparing image hash
+                img_bytes = io.BytesIO()
+                paste_result_enemy.image_data.save(img_bytes, format='PNG')
+                img_hash = hashlib.md5(img_bytes.getvalue()).hexdigest()
+                
+                if img_hash != st.session_state.last_enemy_paste_id:
+                    st.session_state.enemy_pasted_images.append(paste_result_enemy.image_data)
+                    st.session_state.last_enemy_paste_id = img_hash
+                    st.success(f"✅ Image pasted! Total: {len(st.session_state.enemy_pasted_images)} image(s)")
+                    st.rerun()
+            
+            # Show all pasted images
+            if len(st.session_state.enemy_pasted_images) > 0:
+                with st.expander(f"Preview Pasted Images ({len(st.session_state.enemy_pasted_images)})"):
+                    for i, img in enumerate(st.session_state.enemy_pasted_images):
+                        col_img, col_del = st.columns([5, 1])
+                        with col_img:
+                            st.image(img, caption=f"Pasted Image {i+1}", use_container_width=True)
+                        with col_del:
+                            if st.button("❌", key=f"del_enemy_{i}"):
+                                st.session_state.enemy_pasted_images.pop(i)
+                                st.rerun()
+            
+            st.write("📁 **Or Upload Files:**")
             enemy_files = st.file_uploader(
                 "Upload Enemy Team Screenshots",
                 type=['png', 'jpg', 'jpeg'],
@@ -762,6 +887,94 @@ with extractor_tab:
             if enemy_csv:
                 st.session_state.enemy_data = pd.read_csv(enemy_csv)
                 st.success("✅ Enemy Team data loaded from CSV")
+        
+        st.markdown("---")
+        
+        # OCR Extraction Button
+        st.subheader("🤖 Extract Data with OCR")
+        
+        if not OCR_AVAILABLE:
+            st.warning("⚠️ OCR functionality requires EasyOCR. Install with: `pip install easyocr`")
+        else:
+            st.info("✅ EasyOCR is ready. First-time use may download language models (~100MB).")
+        
+        col_extract1, col_extract2 = st.columns(2)
+        
+        with col_extract1:
+            st.write("**YB Team Extraction**")
+            total_yb_images = len(st.session_state.yb_pasted_images) + (len(yb_files) if yb_files else 0)
+            st.info(f"📊 {total_yb_images} image(s) ready for extraction")
+            
+            if st.button("🔍 Extract YB Team Data", key="extract_yb", disabled=not OCR_AVAILABLE or total_yb_images == 0):
+                with st.spinner("Extracting data from images..."):
+                    all_yb_data = []
+                    errors = []
+                    
+                    # Process pasted images
+                    for i, img in enumerate(st.session_state.yb_pasted_images):
+                        df, error = extract_data_from_image(img)
+                        if df is not None:
+                            all_yb_data.append(df)
+                        else:
+                            errors.append(f"Pasted Image {i+1}: {error}")
+                    
+                    # Process uploaded files
+                    if yb_files:
+                        for i, file in enumerate(yb_files):
+                            img = Image.open(file)
+                            df, error = extract_data_from_image(img)
+                            if df is not None:
+                                all_yb_data.append(df)
+                            else:
+                                errors.append(f"Uploaded Image {i+1}: {error}")
+                    
+                    if all_yb_data:
+                        st.session_state.yb_data = pd.concat(all_yb_data, ignore_index=True)
+                        st.success(f"✅ Extracted {len(st.session_state.yb_data)} players from YB Team images!")
+                        st.info("👉 Go to 'Review & Save' to verify and save the data.")
+                    
+                    if errors:
+                        with st.expander("⚠️ Extraction Warnings"):
+                            for error in errors:
+                                st.warning(error)
+        
+        with col_extract2:
+            st.write("**Enemy Team Extraction**")
+            total_enemy_images = len(st.session_state.enemy_pasted_images) + (len(enemy_files) if enemy_files else 0)
+            st.info(f"📊 {total_enemy_images} image(s) ready for extraction")
+            
+            if st.button("🔍 Extract Enemy Team Data", key="extract_enemy", disabled=not OCR_AVAILABLE or total_enemy_images == 0):
+                with st.spinner("Extracting data from images..."):
+                    all_enemy_data = []
+                    errors = []
+                    
+                    # Process pasted images
+                    for i, img in enumerate(st.session_state.enemy_pasted_images):
+                        df, error = extract_data_from_image(img)
+                        if df is not None:
+                            all_enemy_data.append(df)
+                        else:
+                            errors.append(f"Pasted Image {i+1}: {error}")
+                    
+                    # Process uploaded files
+                    if enemy_files:
+                        for i, file in enumerate(enemy_files):
+                            img = Image.open(file)
+                            df, error = extract_data_from_image(img)
+                            if df is not None:
+                                all_enemy_data.append(df)
+                            else:
+                                errors.append(f"Uploaded Image {i+1}: {error}")
+                    
+                    if all_enemy_data:
+                        st.session_state.enemy_data = pd.concat(all_enemy_data, ignore_index=True)
+                        st.success(f"✅ Extracted {len(st.session_state.enemy_data)} players from Enemy Team images!")
+                        st.info("👉 Go to 'Review & Save' to verify and save the data.")
+                    
+                    if errors:
+                        with st.expander("⚠️ Extraction Warnings"):
+                            for error in errors:
+                                st.warning(error)
     
     elif extractor_page == "Review & Save":
         st.subheader("📊 Review & Save Match Data")
@@ -844,7 +1057,8 @@ with extractor_tab:
                 if st.button("💾 Save to Database", type="primary", use_container_width=True):
                     try:
                         db_path = Path('data/analysis.db')
-                        conn = sqlite3.connect(db_path)
+                        # Use check_same_thread=False for Streamlit compatibility
+                        conn = sqlite3.connect(db_path, check_same_thread=False)
                         cursor = conn.cursor()
                         
                         match_date = st.session_state.match_id.split('_')[0]
