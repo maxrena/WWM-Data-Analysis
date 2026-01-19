@@ -251,74 +251,6 @@ def generate_pdf_report():
         pdf.cell(35, 7, f"{enemy_avg:.2f}", 1)
         pdf.cell(35, 7, f"{diff:+.2f}", 1, ln=True)
     
-    pdf.add_page()
-    
-    # ===== PLAYER RANKINGS SECTION =====
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, '5. Overall Player Rankings', ln=True)
-    pdf.ln(5)
-    
-    # Combine teams
-    yb_df_copy = yb_df.copy()
-    enemy_df_copy = enemy_df.copy()
-    yb_df_copy['team'] = 'YB'
-    enemy_df_copy['team'] = 'Enemy'
-    all_players = pd.concat([yb_df_copy, enemy_df_copy], ignore_index=True)
-    
-    # Top 20 by Defeated
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Top 20 Players by Defeated', ln=True)
-    pdf.set_font('Arial', 'B', 8)
-    
-    pdf.cell(10, 6, 'Rank', 1)
-    pdf.cell(50, 6, 'Player', 1)
-    pdf.cell(20, 6, 'Team', 1)
-    pdf.cell(25, 6, 'Defeated', 1)
-    pdf.cell(30, 6, 'Damage', 1)
-    pdf.cell(25, 6, 'Assist', 1)
-    pdf.cell(25, 6, 'Tank', 1, ln=True)
-    
-    top_20 = all_players.nlargest(20, 'defeated')
-    for idx, row in enumerate(top_20.itertuples(), 1):
-        player_name = str(row.player_name)[:18]
-        pdf.set_font('Arial', '', 8)
-        pdf.cell(10, 6, str(idx), 1)
-        pdf.set_font('DejaVu', '', 8)
-        pdf.cell(50, 6, player_name, 1)
-        pdf.set_font('Arial', '', 8)
-        pdf.cell(20, 6, row.team, 1)
-        pdf.cell(25, 6, f"{int(row.defeated)}", 1)
-        pdf.cell(30, 6, f"{int(row.damage):,}", 1)
-        pdf.cell(25, 6, f"{int(row.assist)}", 1)
-        pdf.cell(25, 6, f"{int(row.tank):,}", 1, ln=True)
-    
-    pdf.ln(10)
-    
-    # Top 10 by Damage
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'Top 10 Players by Damage', ln=True)
-    pdf.set_font('Arial', 'B', 8)
-    
-    pdf.cell(10, 6, 'Rank', 1)
-    pdf.cell(55, 6, 'Player', 1)
-    pdf.cell(20, 6, 'Team', 1)
-    pdf.cell(35, 6, 'Damage', 1)
-    pdf.cell(25, 6, 'Defeated', 1)
-    pdf.cell(25, 6, 'Assist', 1, ln=True)
-    
-    top_damage = all_players.nlargest(10, 'damage')
-    for idx, row in enumerate(top_damage.itertuples(), 1):
-        player_name = str(row.player_name)[:20]
-        pdf.set_font('Arial', '', 8)
-        pdf.cell(10, 6, str(idx), 1)
-        pdf.set_font('DejaVu', '', 8)
-        pdf.cell(55, 6, player_name, 1)
-        pdf.set_font('Arial', '', 8)
-        pdf.cell(20, 6, row.team, 1)
-        pdf.cell(35, 6, f"{int(row.damage):,}", 1)
-        pdf.cell(25, 6, f"{int(row.defeated)}", 1)
-        pdf.cell(25, 6, f"{int(row.assist)}", 1, ln=True)
-    
     # Footer
     pdf.ln(15)
     pdf.set_font('Arial', 'I', 8)
@@ -331,7 +263,7 @@ def generate_pdf_report():
 st.sidebar.title("🎮 Navigation")
 page = st.sidebar.radio(
     "Select View",
-    ["Overview", "YB Team Stats", "Enemy Team Stats", "Head-to-Head Comparison", "Player Rankings"]
+    ["Overview", "YB Team Stats", "Enemy Team Stats", "Head-to-Head Comparison"]
 )
 
 # PDF Export Button
@@ -651,71 +583,7 @@ elif page == "Head-to-Head Comparison":
             use_container_width=True
         )
 
-# Player Rankings Page
-elif page == "Player Rankings":
-    st.header("🏅 Player Rankings")
-    
-    yb_df = load_yb_stats().copy()
-    enemy_df = load_enemy_stats().copy()
-    
-    # Combine both teams
-    yb_df['team'] = 'YB Team'
-    enemy_df['team'] = 'Enemy Team'
-    all_players = pd.concat([yb_df, enemy_df], ignore_index=True)
-    
-    # Select ranking metric
-    rank_metric = st.selectbox(
-        "Rank by",
-        ["defeated", "damage", "assist", "tank", "heal", "siege_damage"],
-        format_func=lambda x: x.replace('_', ' ').title()
-    )
-    
-    # Top 20 overall
-    top_20 = all_players.nlargest(20, rank_metric)[['player_name', 'team', rank_metric, 'defeated', 'damage', 'assist']].copy()
-    top_20 = top_20.reset_index(drop=True)
-    top_20.insert(0, 'Rank', range(1, len(top_20) + 1))
-    
-    st.subheader(f"Top 20 Players by {rank_metric.replace('_', ' ').title()}")
-    
-    # Format numbers directly in the dataframe
-    format_dict = {
-        rank_metric: '{:,.0f}',
-        'defeated': '{:.0f}',
-        'damage': '{:,.0f}',
-        'assist': '{:.0f}'
-    }
-    
-    # Apply formatting to styled dataframe
-    styled_df = top_20.style.format(format_dict)
-    
-    # Add background color based on team
-    def highlight_team(row):
-        if row['team'] == 'YB Team':
-            return ['background-color: #d4edda'] * len(row)
-        else:
-            return ['background-color: #f8d7da'] * len(row)
-    
-    styled_df = styled_df.apply(highlight_team, axis=1)
-    
-    st.dataframe(
-        styled_df,
-        hide_index=True,
-        use_container_width=True,
-        height=600
-    )
-    
-    # Team distribution in top 20
-    st.subheader("Team Distribution in Top 20")
-    team_dist = top_20['team'].value_counts()
-    
-    fig = px.pie(
-        values=team_dist.values,
-        names=team_dist.index,
-        color=team_dist.index,
-        color_discrete_map={'YB Team': '#2ecc71', 'Enemy Team': '#e74c3c'}
-    )
-    fig.update_layout(height=400)
-    st.plotly_chart(fig, use_container_width=True)
+
 
 # Footer
 st.divider()
