@@ -29,7 +29,11 @@ WWM Data Analysis/
 │
 ├── scripts/                    # Utility scripts
 │   ├── load_to_database.py    # Load CSV to database
-│   └── download_fonts.py      # Download Unicode fonts
+│   ├── download_fonts.py      # Download Unicode fonts
+│   ├── add_yb_match.py        # Add new YB team match data
+│   ├── add_enemy_match.py     # Add new enemy team match data
+│   ├── add_match.py           # Add both teams' match data
+│   └── migrate_enemy_stats.py # Migrate enemy_stats to master table
 │
 ├── fonts/                      # DejaVu Unicode fonts for PDF
 │
@@ -46,13 +50,14 @@ WWM Data Analysis/
 
 ## Features
 
-- **Interactive Web Dashboard**: Streamlit-based UI with 5 different analysis views
-- **SQLite Database**: Efficient data storage with indexed queries
+- **Interactive Web Dashboard**: Streamlit-based UI with 4 different analysis views
+- **SQLite Database**: Efficient data storage with indexed queries and match history tracking
+- **Match History**: Track multiple matches over time with dated snapshots
 - **Unicode Support**: Full support for Chinese and international characters
 - **PDF Export**: Generate comprehensive match reports with all statistics
 - **Data Visualization**: Interactive charts using Plotly
 - **Team Comparison**: Head-to-head analysis between YB Team and Enemy Team
-- **Player Rankings**: Overall rankings across both teams by various metrics
+- **Auto-Reload**: Development watch script for automatic dashboard refresh
 
 ## Getting Started
 
@@ -91,6 +96,11 @@ WWM Data Analysis/
    ```powershell
    streamlit run app.py
    ```
+   
+   Or use the auto-reload watch script:
+   ```powershell
+   .\watch.ps1
+   ```
 
 2. Open your browser to `http://localhost:8501`
 
@@ -99,9 +109,41 @@ WWM Data Analysis/
    - **YB Team Stats**: Detailed YB team analysis
    - **Enemy Team Stats**: Detailed enemy team analysis
    - **Head-to-Head Comparison**: Direct team comparisons
-   - **Player Rankings**: Overall player rankings
 
 4. Export PDF reports using the sidebar button
+
+## Database Structure
+
+The project uses a **master table + dated snapshots** architecture:
+
+- **Master Tables**: `youngbuffalo_stats`, `enemy_all_stats` - contain all historical match data
+- **Dated Tables**: `yb_stats_YYYYMMDD`, `enemy_stats_YYYYMMDD` - individual match snapshots
+- **VIEWs**: `yb_stats`, `enemy_stats` - always show the latest match data
+
+See [DATABASE.md](DATABASE.md) for complete documentation.
+
+### Adding New Match Data
+
+**Add both teams at once:**
+```powershell
+python scripts/add_match.py data/yb_20260119.csv data/enemy_20260119.csv 20260119
+```
+
+**Add YB team only:**
+```powershell
+python scripts/add_yb_match.py data/yb_20260119.csv 20260119
+```
+
+**Add enemy team only:**
+```powershell
+python scripts/add_enemy_match.py data/enemy_20260119.csv 20260119
+```
+
+The scripts will:
+1. Create dated snapshot tables
+2. Add data to master tables with match_date
+3. Update VIEWs to show the latest match
+4. Dashboard automatically displays the new data!
 
 ### Quick Start
 
