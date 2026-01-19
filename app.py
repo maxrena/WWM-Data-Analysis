@@ -13,6 +13,8 @@ from pathlib import Path
 from datetime import datetime
 from fpdf import FPDF
 import io
+from PIL import Image
+import sqlite3
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent / 'src'))
@@ -42,8 +44,31 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #1f77b4;
     }
+    .upload-box {
+        border: 2px dashed #1f77b4;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        background-color: #f0f2f6;
+        margin: 1rem 0;
+    }
+    .success-box {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 5px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# Initialize session state for data extractor
+if 'yb_data' not in st.session_state:
+    st.session_state.yb_data = None
+if 'enemy_data' not in st.session_state:
+    st.session_state.enemy_data = None
+if 'match_id' not in st.session_state:
+    st.session_state.match_id = None
 
 # Initialize database connection
 @st.cache_resource
@@ -65,6 +90,12 @@ def load_enemy_stats():
 
 # Header
 st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.2</p>', unsafe_allow_html=True)
+
+# Main tabs
+tab1, tab2 = st.tabs(["📊 Dashboard", "📸 Data Extractor"])
+
+# ==================== DASHBOARD TAB ====================
+with tab1:
 
 # PDF Export Function
 def generate_pdf_report():
@@ -260,14 +291,10 @@ def generate_pdf_report():
     return bytes(pdf.output())
 
 # Sidebar
-st.sidebar.title("🎮 Navigation")
-page = st.sidebar.radio(
-    "Select View",
-    ["Overview", "YB Team Stats", "Enemy Team Stats", "Head-to-Head Comparison"]
-)
+st.sidebar.title("🎮 WWM Data Analysis v1.2")
+st.sidebar.divider()
 
 # PDF Export Button
-st.sidebar.divider()
 st.sidebar.subheader("📄 Export")
 if st.sidebar.button("📥 Download PDF Report", use_container_width=True):
     try:
@@ -281,10 +308,21 @@ if st.sidebar.button("📥 Download PDF Report", use_container_width=True):
         )
         st.sidebar.success("✅ PDF ready for download!")
     except Exception as e:
-        st.sidebar.error(f"Error generating PDF: {str(e)}")
+        st.sidebar.error(f"Error generating PDF: {e}")
 
-# Overview Page
-if page == "Overview":
+# Create tabs
+main_tab, extractor_tab = st.tabs(["📊 Dashboard", "📸 Data Extractor"])
+
+# ==================== DASHBOARD TAB ====================
+with main_tab:
+    page = st.radio(
+        "Select View",
+        ["Overview", "YB Team Stats", "Enemy Team Stats", "Head-to-Head Comparison"],
+        horizontal=True
+    )
+
+    # Overview Page
+    if page == "Overview":
     st.header("📊 Match Overview")
     
     yb_df = load_yb_stats()
@@ -380,8 +418,8 @@ if page == "Overview":
         enemy_avg = enemy_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
         st.dataframe(enemy_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
 
-# YB Team Stats Page
-elif page == "YB Team Stats":
+    # YB Team Stats Page
+    elif page == "YB Team Stats":
     st.header("🟢 YB Team Statistics")
     
     yb_df = load_yb_stats()
@@ -438,8 +476,8 @@ elif page == "YB Team Stats":
         height=400
     )
 
-# Enemy Team Stats Page
-elif page == "Enemy Team Stats":
+    # Enemy Team Stats Page
+    elif page == "Enemy Team Stats":
     st.header("🔴 Enemy Team Statistics")
     
     enemy_df = load_enemy_stats()
@@ -496,8 +534,8 @@ elif page == "Enemy Team Stats":
         height=400
     )
 
-# Head-to-Head Comparison Page
-elif page == "Head-to-Head Comparison":
+    # Head-to-Head Comparison Page
+    elif page == "Head-to-Head Comparison":
     st.header("⚔️ Head-to-Head Analysis")
     
     yb_df = load_yb_stats()
@@ -584,12 +622,316 @@ elif page == "Head-to-Head Comparison":
         )
 
 
+# ==================== DATA EXTRACTOR TAB ====================
+with extractor_tab:
+    st.header("📸 Match Data Extractor")
+    
+    extractor_page = st.radio(
+        "Extractor Mode",
+        ["Upload & Extract", "Review & Save"],
+        horizontal=True
+    )
+    
+    if extractor_page == "Upload & Extract":
+        st.subheader("📤 Upload Match Screenshots")
+        
+        # Match metadata
+        col1, col2 = st.columns(2)
+        with col1:
+            match_date = st.date_input(
+                "Match Date",
+                value=datetime.now(),
+                help="Select the date when this match was played"
+            )
+            match_date_str = match_date.strftime('%Y%m%d')
+        
+        with col2:
+            match_time = st.time_input(
+                "Match Time (optional)",
+                value=datetime.now().time(),
+                help="Time of the match for unique identification"
+            )
+            match_time_str = match_time.strftime('%H%M%S')
+        
+        # Generate match ID
+        match_id = f"{match_date_str}_{match_time_str}"
+        st.session_state.match_id = match_id
+        st.info(f"📋 Match ID: `{match_id}`")
+        
+        st.markdown("---")
+        
+        # Two-column layout for team uploads
+        col_yb, col_enemy = st.columns(2)
+        
+        # YB Team Upload
+        with col_yb:
+            st.subheader("🟢 My Team (YoungBuffalo)")
+            
+            yb_files = st.file_uploader(
+                "Upload YB Team Screenshots",
+                type=['png', 'jpg', 'jpeg'],
+                accept_multiple_files=True,
+                key="yb_upload",
+                help="Upload one or more screenshots of your team's statistics"
+            )
+            
+            if yb_files:
+                st.success(f"✅ {len(yb_files)} image(s) uploaded")
+                
+                # Show thumbnails
+                with st.expander("Preview Images"):
+                    for i, file in enumerate(yb_files):
+                        img = Image.open(file)
+                        st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                
+                # Manual data entry option
+                st.markdown("### Enter Data Manually")
+                st.write("Please enter the data manually (OCR coming soon):")
+                
+                num_players = st.number_input("Number of players", min_value=1, max_value=50, value=5, key="yb_num")
+                
+                if st.button("📝 Enter YB Team Data", key="yb_manual"):
+                    st.session_state.yb_data = pd.DataFrame({
+                        'player_name': [''] * num_players,
+                        'defeated': [0] * num_players,
+                        'assist': [0] * num_players,
+                        'defeated_2': [0] * num_players,
+                        'fun_coin': [0] * num_players,
+                        'damage': [0] * num_players,
+                        'tank': [0] * num_players,
+                        'heal': [0] * num_players,
+                        'siege_damage': [0] * num_players
+                    })
+                    st.success("✅ Empty table created. Go to 'Review & Save' to edit data.")
+        
+        # Enemy Team Upload
+        with col_enemy:
+            st.subheader("🔴 Enemy Team")
+            
+            enemy_files = st.file_uploader(
+                "Upload Enemy Team Screenshots",
+                type=['png', 'jpg', 'jpeg'],
+                accept_multiple_files=True,
+                key="enemy_upload",
+                help="Upload one or more screenshots of enemy team's statistics"
+            )
+            
+            if enemy_files:
+                st.success(f"✅ {len(enemy_files)} image(s) uploaded")
+                
+                # Show thumbnails
+                with st.expander("Preview Images"):
+                    for i, file in enumerate(enemy_files):
+                        img = Image.open(file)
+                        st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                
+                # Manual data entry option
+                st.markdown("### Enter Data Manually")
+                st.write("Please enter the data manually (OCR coming soon):")
+                
+                num_players = st.number_input("Number of players", min_value=1, max_value=50, value=5, key="enemy_num")
+                
+                if st.button("📝 Enter Enemy Team Data", key="enemy_manual"):
+                    st.session_state.enemy_data = pd.DataFrame({
+                        'player_name': [''] * num_players,
+                        'defeated': [0] * num_players,
+                        'assist': [0] * num_players,
+                        'defeated_2': [0] * num_players,
+                        'fun_coin': [0] * num_players,
+                        'damage': [0] * num_players,
+                        'tank': [0] * num_players,
+                        'heal': [0] * num_players,
+                        'siege_damage': [0] * num_players
+                    })
+                    st.success("✅ Empty table created. Go to 'Review & Save' to edit data.")
+        
+        st.markdown("---")
+        
+        # CSV Upload as alternative
+        st.subheader("📁 Or Upload CSV Files Directly")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            yb_csv = st.file_uploader("YB Team CSV", type=['csv'], key="yb_csv")
+            if yb_csv:
+                st.session_state.yb_data = pd.read_csv(yb_csv)
+                st.success("✅ YB Team data loaded from CSV")
+        
+        with col2:
+            enemy_csv = st.file_uploader("Enemy Team CSV", type=['csv'], key="enemy_csv")
+            if enemy_csv:
+                st.session_state.enemy_data = pd.read_csv(enemy_csv)
+                st.success("✅ Enemy Team data loaded from CSV")
+    
+    elif extractor_page == "Review & Save":
+        st.subheader("📊 Review & Save Match Data")
+        
+        if st.session_state.match_id:
+            st.info(f"📋 Match ID: `{st.session_state.match_id}`")
+        
+        # Check if we have data
+        has_yb = st.session_state.yb_data is not None
+        has_enemy = st.session_state.enemy_data is not None
+        
+        if not has_yb and not has_enemy:
+            st.warning("⚠️ No data to review. Please upload and extract data first.")
+        else:
+            col1, col2 = st.columns(2)
+            
+            # YB Team Review
+            with col1:
+                st.subheader("🟢 YB Team Data")
+                if has_yb:
+                    # Editable dataframe
+                    edited_yb = st.data_editor(
+                        st.session_state.yb_data,
+                        num_rows="dynamic",
+                        use_container_width=True,
+                        key="yb_editor"
+                    )
+                    st.session_state.yb_data = edited_yb
+                    
+                    st.success(f"✅ {len(edited_yb)} players")
+                else:
+                    st.info("No YB team data available")
+            
+            # Enemy Team Review
+            with col2:
+                st.subheader("🔴 Enemy Team Data")
+                if has_enemy:
+                    # Editable dataframe
+                    edited_enemy = st.data_editor(
+                        st.session_state.enemy_data,
+                        num_rows="dynamic",
+                        use_container_width=True,
+                        key="enemy_editor"
+                    )
+                    st.session_state.enemy_data = edited_enemy
+                    
+                    st.success(f"✅ {len(edited_enemy)} players")
+                else:
+                    st.info("No enemy team data available")
+            
+            st.markdown("---")
+            
+            # Save options
+            st.subheader("💾 Save Options")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📥 Download as CSV", use_container_width=True):
+                    if has_yb:
+                        csv_yb = st.session_state.yb_data.to_csv(index=False)
+                        st.download_button(
+                            "⬇️ Download YB Team CSV",
+                            csv_yb,
+                            f"yb_team_{st.session_state.match_id}.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
+                    if has_enemy:
+                        csv_enemy = st.session_state.enemy_data.to_csv(index=False)
+                        st.download_button(
+                            "⬇️ Download Enemy Team CSV",
+                            csv_enemy,
+                            f"enemy_team_{st.session_state.match_id}.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
+            
+            with col2:
+                if st.button("💾 Save to Database", type="primary", use_container_width=True):
+                    try:
+                        db_path = Path('data/analysis.db')
+                        conn = sqlite3.connect(db_path)
+                        cursor = conn.cursor()
+                        
+                        match_date = st.session_state.match_id.split('_')[0]
+                        
+                        # Save YB team
+                        if has_yb:
+                            # Add to master table
+                            df_yb = st.session_state.yb_data.copy()
+                            df_yb['match_date'] = match_date
+                            df_yb['match_id'] = st.session_state.match_id
+                            
+                            df_yb.to_sql('youngbuffalo_stats', conn, if_exists='append', index=False)
+                            
+                            # Create dated table
+                            dated_table = f"yb_stats_{st.session_state.match_id}"
+                            st.session_state.yb_data.to_sql(dated_table, conn, if_exists='replace', index=False)
+                            
+                            st.success(f"✅ YB team data saved to database")
+                        
+                        # Save Enemy team
+                        if has_enemy:
+                            # Add to master table
+                            df_enemy = st.session_state.enemy_data.copy()
+                            df_enemy['match_date'] = match_date
+                            df_enemy['match_id'] = st.session_state.match_id
+                            
+                            df_enemy.to_sql('enemy_all_stats', conn, if_exists='append', index=False)
+                            
+                            # Create dated table
+                            dated_table = f"enemy_stats_{st.session_state.match_id}"
+                            st.session_state.enemy_data.to_sql(dated_table, conn, if_exists='replace', index=False)
+                            
+                            st.success(f"✅ Enemy team data saved to database")
+                        
+                        # Update VIEWs
+                        if has_yb:
+                            cursor.execute("DROP VIEW IF EXISTS yb_stats")
+                            cursor.execute("SELECT MAX(match_date) FROM youngbuffalo_stats")
+                            latest_date = cursor.fetchone()[0]
+                            view_sql = f"""
+                            CREATE VIEW yb_stats AS
+                            SELECT 
+                                player_name, defeated, assist, defeated_2, fun_coin,
+                                damage, tank, heal, siege_damage
+                            FROM youngbuffalo_stats
+                            WHERE match_date = '{latest_date}'
+                            """
+                            cursor.execute(view_sql)
+                        
+                        if has_enemy:
+                            cursor.execute("DROP VIEW IF EXISTS enemy_stats")
+                            cursor.execute("SELECT MAX(match_date) FROM enemy_all_stats")
+                            latest_date = cursor.fetchone()[0]
+                            view_sql = f"""
+                            CREATE VIEW enemy_stats AS
+                            SELECT 
+                                player_name, defeated, assist, defeated_2, fun_coin,
+                                damage, tank, heal, siege_damage
+                            FROM enemy_all_stats
+                            WHERE match_date = '{latest_date}'
+                            """
+                            cursor.execute(view_sql)
+                        
+                        conn.commit()
+                        conn.close()
+                        
+                        # Clear cache to refresh dashboard data
+                        st.cache_data.clear()
+                        
+                        st.success("🎉 Match data saved successfully!")
+                        st.balloons()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error saving to database: {e}")
+            
+            with col3:
+                if st.button("🗑️ Clear Data", use_container_width=True):
+                    st.session_state.yb_data = None
+                    st.session_state.enemy_data = None
+                    st.session_state.match_id = None
+                    st.rerun()
+
 
 # Footer
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Analysis Dashboard v1.2 | Built with Streamlit<br>
-        <small>🆕 New: Use <a href="http://localhost:8502" target="_blank">Data Extractor</a> to add match data</small>
+        WWM Data Analysis Dashboard v1.2 | Built with Streamlit
     </div>
 """, unsafe_allow_html=True)
