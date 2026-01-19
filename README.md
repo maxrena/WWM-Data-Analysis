@@ -1,8 +1,8 @@
 # WWM Data Analysis Project
 
-**Version 1.0**
+**Version 1.2** - Image Upload & Data Extraction
 
-A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations and PDF reporting capabilities.
+A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and drag-and-drop data extraction capabilities.
 
 ## Project Structure
 
@@ -42,6 +42,8 @@ WWM Data Analysis/
 │   └── reports/               # Generated reports
 │
 ├── app.py                     # Streamlit dashboard application
+├── extractor.py               # v1.2 Data extraction UI (drag & drop)
+├── watch.ps1                  # Auto-reload development script
 ├── requirements.txt           # Python dependencies
 ├── .gitignore                # Git ignore rules
 ├── .env.example              # Environment variables template
@@ -50,6 +52,8 @@ WWM Data Analysis/
 
 ## Features
 
+- **🆕 Drag & Drop Data Extraction**: Upload game screenshots and extract player statistics (v1.2)
+- **🆕 Multiple Matches Per Day**: Track multiple matches with unique match IDs (v1.2)
 - **Interactive Web Dashboard**: Streamlit-based UI with 4 different analysis views
 - **SQLite Database**: Efficient data storage with indexed queries and match history tracking
 - **Match History**: Track multiple matches over time with dated snapshots
@@ -90,25 +94,93 @@ WWM Data Analysis/
    python scripts/download_fonts.py
    ```
 
-### Running the Dashboard
+### Running the Applications
 
-1. Start the Streamlit dashboard:
-   ```powershell
-   streamlit run app.py
-   ```
-   
-   Or use the auto-reload watch script:
-   ```powershell
-   .\watch.ps1
-   ```
+**Option 1: Data Extractor (NEW in v1.2)**
+```powershell
+streamlit run extractor.py --server.port=8502
+```
+- Drag and drop game screenshots
+- Extract player statistics (manual entry for now, OCR coming soon)
+- Upload CSV files directly
+- Save matches with unique IDs (supports multiple matches per day)
+- Access at `http://localhost:8502`
 
-2. Open your browser to `http://localhost:8501`
+**Option 2: Main Dashboard**
+```powershell
+streamlit run app.py
+```
 
-3. Navigate through the different pages:
+Or use the auto-reload watch script:
+```powershell
+.\watch.ps1
+```
+
+- Access at `http://localhost:8501`
+- View comprehensive match statistics and visualizations
+- Export PDF reports
+- Navigate through 4 analysis pages:
    - **Overview**: Team statistics summary
    - **YB Team Stats**: Detailed YB team analysis
    - **Enemy Team Stats**: Detailed enemy team analysis
    - **Head-to-Head Comparison**: Direct team comparisons
+
+## Version 1.2 Features
+
+### 🆕 Data Extraction UI
+
+The new `extractor.py` provides a user-friendly interface for adding match data:
+
+1. **Drag & Drop Interface**
+   - Upload screenshots for both teams simultaneously
+   - Preview uploaded images
+   - Support for multiple images per team
+
+2. **Multiple Matches Per Day**
+   - Each match gets a unique ID: `YYYYMMDD_HHMMSS`
+   - Example: `20260118_143530` (Jan 18, 2026 at 2:35:30 PM)
+   - Track unlimited matches on the same day
+
+3. **Flexible Data Entry**
+   - Upload screenshots (manual entry for now)
+   - Upload CSV files directly
+   - Edit data in interactive tables
+   - Add/remove rows dynamically
+
+4. **Match Management**
+   - Set match date and time
+   - Review data before saving
+   - Download as CSV
+   - Save directly to database
+   - Automatic VIEW updates
+
+### Usage Workflow
+
+1. **Start the Data Extractor**:
+   ```powershell
+   streamlit run extractor.py --server.port=8502
+   ```
+
+2. **Upload Match Data**:
+   - Select match date and time
+   - Upload screenshots or CSV for YB team
+   - Upload screenshots or CSV for enemy team
+   - Enter player statistics manually (or wait for OCR feature)
+
+3. **Review & Edit**:
+   - Navigate to "Review & Save" page
+   - Edit data in interactive tables
+   - Add or remove players as needed
+
+4. **Save to Database**:
+   - Click "Save to Database" button
+   - Data automatically saved with unique match ID
+   - VIEWs updated to show latest match
+   - Dated snapshot tables created
+
+5. **View in Dashboard**:
+   - Open main dashboard at `http://localhost:8501`
+   - See your newly added match data immediately
 
 4. Export PDF reports using the sidebar button
 

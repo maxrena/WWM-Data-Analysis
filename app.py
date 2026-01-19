@@ -20,7 +20,7 @@ from database import DataAnalysisDB
 
 # Page configuration
 st.set_page_config(
-    page_title="WWM Data Analysis Dashboard",
+    page_title="WWM Data Analysis Dashboard v1.2",
     page_icon="⚔️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -64,7 +64,7 @@ def load_enemy_stats():
     return db.query("SELECT * FROM enemy_stats")
 
 # Header
-st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.2</p>', unsafe_allow_html=True)
 
 # PDF Export Function
 def generate_pdf_report():
@@ -589,6 +589,7 @@ elif page == "Head-to-Head Comparison":
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Analysis Dashboard | Built with Streamlit
+        WWM Data Analysis Dashboard v1.2 | Built with Streamlit<br>
+        <small>🆕 New: Use <a href="http://localhost:8502" target="_blank">Data Extractor</a> to add match data</small>
     </div>
 """, unsafe_allow_html=True)
