@@ -1,5 +1,5 @@
 """
-WWM Match Data Extractor - Version 1.2
+WWM Match Data Extractor - Version 1.3
 Drag-and-drop interface for extracting player statistics from game screenshots
 """
 
@@ -136,7 +136,7 @@ elif page == "Upload & Extract":
             with st.expander("Preview Images"):
                 for i, file in enumerate(yb_files):
                     img = Image.open(file)
-                    st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                    st.image(img, caption=f"Image {i+1}", width='stretch')
             
             # Manual data entry option
             st.markdown("### Enter Data Manually")
@@ -176,7 +176,7 @@ elif page == "Upload & Extract":
             with st.expander("Preview Images"):
                 for i, file in enumerate(enemy_files):
                     img = Image.open(file)
-                    st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                    st.image(img, caption=f"Image {i+1}", width='stretch')
             
             # Manual data entry option
             st.markdown("### Enter Data Manually")
@@ -241,7 +241,7 @@ elif page == "Review & Save":
                 edited_yb = st.data_editor(
                     st.session_state.yb_data,
                     num_rows="dynamic",
-                    use_container_width=True,
+                    width='stretch',
                     key="yb_editor"
                 )
                 st.session_state.yb_data = edited_yb
@@ -258,7 +258,7 @@ elif page == "Review & Save":
                 edited_enemy = st.data_editor(
                     st.session_state.enemy_data,
                     num_rows="dynamic",
-                    use_container_width=True,
+                    width='stretch',
                     key="enemy_editor"
                 )
                 st.session_state.enemy_data = edited_enemy
@@ -275,7 +275,7 @@ elif page == "Review & Save":
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📥 Download as CSV", use_container_width=True):
+            if st.button("📥 Download as CSV", width='stretch'):
                 if has_yb:
                     csv_yb = st.session_state.yb_data.to_csv(index=False)
                     st.download_button(
@@ -283,7 +283,7 @@ elif page == "Review & Save":
                         csv_yb,
                         f"yb_team_{st.session_state.match_id}.csv",
                         "text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
                 if has_enemy:
                     csv_enemy = st.session_state.enemy_data.to_csv(index=False)
@@ -292,11 +292,11 @@ elif page == "Review & Save":
                         csv_enemy,
                         f"enemy_team_{st.session_state.match_id}.csv",
                         "text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
         
         with col2:
-            if st.button("💾 Save to Database", type="primary", use_container_width=True):
+            if st.button("💾 Save to Database", type="primary", width='stretch'):
                 try:
                     db_path = Path('data/analysis.db')
                     conn = sqlite3.connect(db_path)
@@ -385,7 +385,7 @@ elif page == "Review & Save":
                     st.error(f"❌ Error saving to database: {e}")
         
         with col3:
-            if st.button("🗑️ Clear Data", use_container_width=True):
+            if st.button("🗑️ Clear Data", width='stretch'):
                 st.session_state.yb_data = None
                 st.session_state.enemy_data = None
                 st.session_state.match_id = None
@@ -398,3 +398,4 @@ st.markdown("""
         WWM Data Extractor v1.2 | Build comprehensive match database with ease
     </div>
 """, unsafe_allow_html=True)
+

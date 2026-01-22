@@ -1,6 +1,6 @@
 # WWM Data Analysis Project
 
-**Version 1.2** - Image Upload & Data Extraction
+**Version 1.3** - Streamlit Compatibility Update
 
 A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and drag-and-drop data extraction capabilities.
 

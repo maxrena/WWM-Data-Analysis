@@ -2,6 +2,18 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.3.0] - 2026-01-22
+
+### Fixed
+- Replaced all deprecated `use_container_width=True` with `width='stretch'`
+- Replaced all deprecated `use_container_width=False` with `width='content'`
+- Updated all Streamlit components to use the new width parameter
+- Eliminated deprecation warnings for Streamlit 1.53+
+
+### Changed
+- Updated 29 instances across app.py and extractor.py
+- Improved compatibility with latest Streamlit version
+
 ## [1.2.0] - 2026-01-18
 
 ### Added

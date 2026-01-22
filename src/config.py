@@ -2,7 +2,7 @@
 
 # Project Information
 PROJECT_NAME = "WWM Data Analysis"
-VERSION = "0.1.0"
+VERSION = "1.3.0"
 
 # Directory paths
 DATA_DIR = "data"
