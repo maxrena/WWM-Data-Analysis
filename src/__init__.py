@@ -3,7 +3,7 @@ WWM Data Analysis Project
 A comprehensive toolkit for data analysis workflows.
 """
 
-__version__ = "0.1.0"
+__version__ = "1.3.0"
 
 from .data_loader import load_csv, load_excel, save_processed_data
 from .preprocessing import (

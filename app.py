@@ -1,7 +1,7 @@
 """
 WWM Data Analysis Dashboard
 Interactive web application for analyzing player statistics
-Version 2.0 - Added OCR extraction, clipboard paste, and match filtering
+Version 1.3 - Fixed Streamlit deprecation warnings (use_container_width -> width)
 """
 
 import streamlit as st
@@ -415,7 +415,7 @@ with main_tab:
             )
             fig.update_traces(textposition='outside')
             fig.update_layout(showlegend=False, height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.subheader("💥 Total Damage Comparison")
@@ -433,7 +433,7 @@ with main_tab:
             )
             fig.update_traces(textposition='outside', texttemplate='%{text:,}')
             fig.update_layout(showlegend=False, height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Average Stats
         st.subheader("📈 Average Player Statistics")
@@ -442,12 +442,12 @@ with main_tab:
         with col1:
             st.write("**YB Team Averages**")
             yb_avg = yb_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
-            st.dataframe(yb_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
+            st.dataframe(yb_avg.to_frame(name='Average').style.format("{:.2f}"), width='stretch')
         
         with col2:
             st.write("**Enemy Team Averages**")
             enemy_avg = enemy_df[['defeated', 'assist', 'damage', 'tank', 'heal', 'siege_damage']].mean()
-            st.dataframe(enemy_avg.to_frame(name='Average').style.format("{:.2f}"), use_container_width=True)
+            st.dataframe(enemy_avg.to_frame(name='Average').style.format("{:.2f}"), width='stretch')
 
     # YB Team Stats Page
     elif page == "YB Team Stats":
@@ -465,17 +465,17 @@ with main_tab:
         with col1:
             st.subheader("🏆 Top by Defeated")
             top_defeated = yb_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
-            st.dataframe(top_defeated, hide_index=True, use_container_width=True)
+            st.dataframe(top_defeated, hide_index=True, width='stretch')
         
         with col2:
             st.subheader("💥 Top by Damage")
             top_damage = yb_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
-            st.dataframe(top_damage, hide_index=True, use_container_width=True)
+            st.dataframe(top_damage, hide_index=True, width='stretch')
         
         with col3:
             st.subheader("🤝 Top by Assist")
             top_assist = yb_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
-            st.dataframe(top_assist, hide_index=True, use_container_width=True)
+            st.dataframe(top_assist, hide_index=True, width='stretch')
         
         st.divider()
         
@@ -486,7 +486,7 @@ with main_tab:
             st.subheader("Defeated Distribution")
             fig = px.histogram(yb_df, x='defeated', nbins=20, color_discrete_sequence=['#2ecc71'])
             fig.update_layout(showlegend=False, height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.subheader("Damage vs Defeated")
@@ -500,14 +500,14 @@ with main_tab:
                 color_continuous_scale='Greens'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Full data table
         st.subheader("📋 Complete Team Stats")
         st.dataframe(
             yb_df.sort_values('defeated', ascending=False),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             height=400
         )
 
@@ -527,17 +527,17 @@ with main_tab:
         with col1:
             st.subheader("🏆 Top by Defeated")
             top_defeated = enemy_df.nlargest(5, 'defeated')[['player_name', 'defeated', 'damage']]
-            st.dataframe(top_defeated, hide_index=True, use_container_width=True)
+            st.dataframe(top_defeated, hide_index=True, width='stretch')
         
         with col2:
             st.subheader("💥 Top by Damage")
             top_damage = enemy_df.nlargest(5, 'damage')[['player_name', 'damage', 'defeated']]
-            st.dataframe(top_damage, hide_index=True, use_container_width=True)
+            st.dataframe(top_damage, hide_index=True, width='stretch')
         
         with col3:
             st.subheader("🤝 Top by Assist")
             top_assist = enemy_df.nlargest(5, 'assist')[['player_name', 'assist', 'defeated']]
-            st.dataframe(top_assist, hide_index=True, use_container_width=True)
+            st.dataframe(top_assist, hide_index=True, width='stretch')
         
         st.divider()
         
@@ -548,7 +548,7 @@ with main_tab:
             st.subheader("Defeated Distribution")
             fig = px.histogram(enemy_df, x='defeated', nbins=20, color_discrete_sequence=['#e74c3c'])
             fig.update_layout(showlegend=False, height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             st.subheader("Damage vs Defeated")
@@ -562,14 +562,14 @@ with main_tab:
                 color_continuous_scale='Reds'
             )
             fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Full data table
         st.subheader("📋 Complete Team Stats")
         st.dataframe(
             enemy_df.sort_values('defeated', ascending=False),
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             height=400
         )
 
@@ -610,7 +610,7 @@ with main_tab:
             title=f'Top 10 Players by {metric.replace("_", " ").title()}'
         )
         fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Statistical comparison
         st.subheader("📊 Statistical Comparison")
@@ -639,7 +639,7 @@ with main_tab:
                     'Difference': '{:+,.0f}'
                 }),
                 hide_index=True,
-                use_container_width=True
+                width='stretch'
             )
         
         with col2:
@@ -661,7 +661,7 @@ with main_tab:
                     'Difference': '{:+.2f}'
                 }),
                 hide_index=True,
-                use_container_width=True
+                width='stretch'
             )
 
 
@@ -744,7 +744,7 @@ with extractor_tab:
                     for i, img in enumerate(st.session_state.yb_pasted_images):
                         col_img, col_del = st.columns([5, 1])
                         with col_img:
-                            st.image(img, caption=f"Pasted Image {i+1}", use_container_width=True)
+                            st.image(img, caption=f"Pasted Image {i+1}", width='stretch')
                         with col_del:
                             if st.button("❌", key=f"del_yb_{i}"):
                                 st.session_state.yb_pasted_images.pop(i)
@@ -766,7 +766,7 @@ with extractor_tab:
                 with st.expander("Preview Images"):
                     for i, file in enumerate(yb_files):
                         img = Image.open(file)
-                        st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                        st.image(img, caption=f"Image {i+1}", width='stretch')
                 
                 # Manual data entry option
                 st.markdown("### Enter Data Manually")
@@ -826,7 +826,7 @@ with extractor_tab:
                     for i, img in enumerate(st.session_state.enemy_pasted_images):
                         col_img, col_del = st.columns([5, 1])
                         with col_img:
-                            st.image(img, caption=f"Pasted Image {i+1}", use_container_width=True)
+                            st.image(img, caption=f"Pasted Image {i+1}", width='stretch')
                         with col_del:
                             if st.button("❌", key=f"del_enemy_{i}"):
                                 st.session_state.enemy_pasted_images.pop(i)
@@ -848,7 +848,7 @@ with extractor_tab:
                 with st.expander("Preview Images"):
                     for i, file in enumerate(enemy_files):
                         img = Image.open(file)
-                        st.image(img, caption=f"Image {i+1}", use_container_width=True)
+                        st.image(img, caption=f"Image {i+1}", width='stretch')
                 
                 # Manual data entry option
                 st.markdown("### Enter Data Manually")
@@ -999,7 +999,7 @@ with extractor_tab:
                     edited_yb = st.data_editor(
                         st.session_state.yb_data,
                         num_rows="dynamic",
-                        use_container_width=True,
+                        width='stretch',
                         key="yb_editor"
                     )
                     st.session_state.yb_data = edited_yb
@@ -1016,7 +1016,7 @@ with extractor_tab:
                     edited_enemy = st.data_editor(
                         st.session_state.enemy_data,
                         num_rows="dynamic",
-                        use_container_width=True,
+                        width='stretch',
                         key="enemy_editor"
                     )
                     st.session_state.enemy_data = edited_enemy
@@ -1033,7 +1033,7 @@ with extractor_tab:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📥 Download as CSV", use_container_width=True):
+                if st.button("📥 Download as CSV", width='stretch'):
                     if has_yb:
                         csv_yb = st.session_state.yb_data.to_csv(index=False)
                         st.download_button(
@@ -1041,7 +1041,7 @@ with extractor_tab:
                             csv_yb,
                             f"yb_team_{st.session_state.match_id}.csv",
                             "text/csv",
-                            use_container_width=True
+                            width='stretch'
                         )
                     if has_enemy:
                         csv_enemy = st.session_state.enemy_data.to_csv(index=False)
@@ -1050,11 +1050,11 @@ with extractor_tab:
                             csv_enemy,
                             f"enemy_team_{st.session_state.match_id}.csv",
                             "text/csv",
-                            use_container_width=True
+                            width='stretch'
                         )
             
             with col2:
-                if st.button("💾 Save to Database", type="primary", use_container_width=True):
+                if st.button("💾 Save to Database", type="primary", width='stretch'):
                     try:
                         db_path = Path('data/analysis.db')
                         # Use check_same_thread=False for Streamlit compatibility
@@ -1135,7 +1135,7 @@ with extractor_tab:
                         st.error(f"❌ Error saving to database: {e}")
             
             with col3:
-                if st.button("🗑️ Clear Data", use_container_width=True):
+                if st.button("🗑️ Clear Data", width='stretch'):
                     st.session_state.yb_data = None
                     st.session_state.enemy_data = None
                     st.session_state.match_id = None
