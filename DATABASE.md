@@ -186,3 +186,89 @@ Both YB and Enemy CSV files should have these columns:
 4. ✅ **Flexible** - Add new matches without losing old data
 5. ✅ **Efficient** - Indexed for fast queries
 6. ✅ **Organized** - Each match has its own dated table for easy reference
+## Match Groups (Date-Based Indexing)
+
+### Overview
+
+The `match_groups` table provides a centralized index of all matches by date, making it easy to:
+- Find all matches for a specific date
+- Compare statistics across different match dates
+- Query match metadata without scanning full player tables
+
+### Match Groups Table Structure
+
+```sql
+CREATE TABLE match_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_date TEXT NOT NULL UNIQUE,
+    yb_player_count INTEGER DEFAULT 0,
+    enemy_player_count INTEGER DEFAULT 0,
+    yb_total_defeated INTEGER DEFAULT 0,
+    enemy_total_defeated INTEGER DEFAULT 0,
+    yb_avg_damage REAL DEFAULT 0,
+    enemy_avg_damage REAL DEFAULT 0,
+    has_yb_data INTEGER DEFAULT 0,
+    has_enemy_data INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Using Match Groups
+
+**Initialize/Update Match Groups:**
+```bash
+python scripts/manage_match_groups.py
+```
+
+**In Python Code:**
+```python
+from database import DataAnalysisDB
+
+db = DataAnalysisDB()
+db.connect()
+
+# List all match dates with statistics
+matches = db.list_all_match_dates(order='DESC')
+
+# Get specific match by date
+match_data = db.get_match_by_date('20260118', team='both')
+
+# Update index after adding new matches
+db.update_match_groups()
+
+db.close()
+```
+
+**SQL Queries:**
+```sql
+-- Find latest match
+SELECT * FROM match_groups ORDER BY match_date DESC LIMIT 1;
+
+-- Find matches with high average damage
+SELECT * FROM match_groups 
+WHERE yb_avg_damage > 2000000 
+ORDER BY yb_avg_damage DESC;
+
+-- Compare YB vs Enemy performance
+SELECT 
+    match_date,
+    yb_total_defeated - enemy_total_defeated as defeat_diff,
+    yb_avg_damage - enemy_avg_damage as damage_diff
+FROM match_groups
+ORDER BY match_date DESC;
+
+-- Get monthly match counts
+SELECT 
+    SUBSTR(match_date, 1, 6) as month,
+    COUNT(*) as match_count
+FROM match_groups
+GROUP BY month;
+```
+
+### Benefits
+
+- **Fast Lookup**: Indexed by date for instant retrieval
+- **Statistics at a Glance**: Pre-calculated averages and totals
+- **Easy Filtering**: Find matches by criteria without scanning player tables
+- **Maintenance**: Auto-updates with `db.update_match_groups()`

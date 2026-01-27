@@ -2,6 +2,44 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.4.0] - 2026-01-27
+
+### Added
+- **🆕 Match Groups Feature**
+  - Date-based indexing system for easy match lookup
+  - New `match_groups` table with pre-calculated statistics
+  - Methods: `create_match_groups_table()`, `update_match_groups()`, `get_match_by_date()`, `list_all_match_dates()`
+  - Automatic indexing when adding new matches
+  - Fast lookup by match date with indexed queries
+
+- **New Scripts**
+  - `scripts/manage_match_groups.py` - Initialize and manage match groups
+  - `scripts/example_match_groups.py` - Comprehensive usage examples
+
+- **Database Enhancements**
+  - `match_groups` table stores metadata for each match date
+  - Pre-calculated statistics: player counts, total defeats, average damage
+  - Indexed by match_date for optimal performance
+  - Auto-update integration in add_yb_match.py and add_enemy_match.py
+
+- **Documentation**
+  - `MATCH_GROUPS.md` - Quick reference guide
+  - `IMPLEMENTATION_SUMMARY.md` - Complete implementation details
+  - Updated `DATABASE.md` with match groups section
+  - Updated `README.md` with v1.4 features
+
+### Changed
+- Enhanced `src/database.py` with match groups functionality
+- Updated `scripts/add_yb_match.py` to auto-update match groups
+- Updated `scripts/add_enemy_match.py` to auto-update match groups
+- Fixed Unicode encoding issues for Windows compatibility (replaced ✓ with [OK])
+
+### Benefits
+- Fast date-based match lookup
+- Easy comparison across matches
+- Pre-calculated team statistics
+- Automatic maintenance when adding matches
+
 ## [1.3.0] - 2026-01-22
 
 ### Fixed

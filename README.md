@@ -1,6 +1,6 @@
 # WWM Data Analysis Project
 
-**Version 1.3** - Streamlit Compatibility Update
+**Version 1.4** - Match Groups & Date-Based Indexing
 
 A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and drag-and-drop data extraction capabilities.
 
@@ -54,6 +54,7 @@ WWM Data Analysis/
 
 - **🆕 Drag & Drop Data Extraction**: Upload game screenshots and extract player statistics (v1.2)
 - **🆕 Multiple Matches Per Day**: Track multiple matches with unique match IDs (v1.2)
+- **🆕 Match Groups**: Date-based indexing for easy match lookup and comparison (v1.4)
 - **Interactive Web Dashboard**: Streamlit-based UI with 4 different analysis views
 - **SQLite Database**: Efficient data storage with indexed queries and match history tracking
 - **Match History**: Track multiple matches over time with dated snapshots
@@ -193,6 +194,42 @@ The project uses a **master table + dated snapshots** architecture:
 - **VIEWs**: `yb_stats`, `enemy_stats` - always show the latest match data
 
 See [DATABASE.md](DATABASE.md) for complete documentation.
+
+### Match Groups (NEW in v1.4)
+
+Match groups provide date-based indexing for easy match lookup and comparison:
+
+**Initialize match groups:**
+```powershell
+python scripts/manage_match_groups.py
+```
+
+**Use in Python:**
+```python
+from src.database import DataAnalysisDB
+
+db = DataAnalysisDB()
+db.connect()
+
+# List all match dates
+matches = db.list_all_match_dates(order='DESC')
+
+# Get specific match by date
+match_data = db.get_match_by_date('20260118', team='both')
+
+# Update after adding new matches
+db.update_match_groups()
+
+db.close()
+```
+
+**Benefits:**
+- Fast lookup of matches by date
+- Pre-calculated statistics (averages, totals)
+- Easy comparison across matches
+- Automatic indexing
+
+See [DATABASE.md](DATABASE.md) for more examples and SQL queries.
 
 ### Adding New Match Data
 

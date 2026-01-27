@@ -66,7 +66,7 @@ class DataAnalysisDB:
             self.connect()
         
         df.to_sql(table_name, self.conn, if_exists=if_exists, index=False)
-        print(f"✓ Loaded {len(df)} rows into table '{table_name}'")
+        print(f"[OK] Loaded {len(df)} rows into table '{table_name}'")
         
         return len(df)
     
@@ -98,7 +98,7 @@ class DataAnalysisDB:
         cursor = self.conn.cursor()
         cursor.execute(sql)
         self.conn.commit()
-        print(f"✓ Executed: {sql[:50]}...")
+        print(f"[OK] Executed: {sql[:50]}...")
     
     def list_tables(self) -> List[str]:
         """
@@ -170,7 +170,198 @@ class DataAnalysisDB:
         """
         df = self.query(f"SELECT * FROM {table_name}")
         df.to_csv(output_path, index=False)
-        print(f"✓ Exported {len(df)} rows to {output_path}")
+        print(f"[OK] Exported {len(df)} rows to {output_path}")
+    
+    def create_match_groups_table(self) -> None:
+        """
+        Create match_groups table for date-based match organization.
+        This table stores metadata about each match date for easy indexing.
+        """
+        schema_sql = """
+        CREATE TABLE IF NOT EXISTS match_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_date TEXT NOT NULL UNIQUE,
+            yb_player_count INTEGER DEFAULT 0,
+            enemy_player_count INTEGER DEFAULT 0,
+            yb_total_defeated INTEGER DEFAULT 0,
+            enemy_total_defeated INTEGER DEFAULT 0,
+            yb_avg_damage REAL DEFAULT 0,
+            enemy_avg_damage REAL DEFAULT 0,
+            has_yb_data INTEGER DEFAULT 0,
+            has_enemy_data INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_match_date ON match_groups(match_date);
+        CREATE INDEX IF NOT EXISTS idx_created_at ON match_groups(created_at);
+        """
+        
+        if not self.conn:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        for statement in schema_sql.split(';'):
+            if statement.strip():
+                cursor.execute(statement)
+        
+        self.conn.commit()
+        print("[OK] Created match_groups table with indexes")
+    
+    def update_match_groups(self) -> int:
+        """
+        Update match_groups table with statistics from all match dates.
+        This indexes all matches by date for easy lookup.
+        
+        Returns:
+            Number of match groups created/updated
+        """
+        if not self.conn:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        
+        # Get all unique match dates from both YB and enemy tables
+        yb_dates_query = """
+            SELECT DISTINCT match_date 
+            FROM youngbuffalo_stats 
+            WHERE match_date IS NOT NULL
+        """
+        
+        enemy_dates_query = """
+            SELECT DISTINCT match_date 
+            FROM enemy_all_stats 
+            WHERE match_date IS NOT NULL
+        """
+        
+        # Combine all dates
+        all_dates = set()
+        try:
+            cursor.execute(yb_dates_query)
+            all_dates.update([row[0] for row in cursor.fetchall()])
+        except sqlite3.OperationalError:
+            pass  # Table might not exist
+        
+        try:
+            cursor.execute(enemy_dates_query)
+            all_dates.update([row[0] for row in cursor.fetchall()])
+        except sqlite3.OperationalError:
+            pass  # Table might not exist
+        
+        count = 0
+        for match_date in sorted(all_dates):
+            # Calculate YB stats
+            yb_stats = cursor.execute("""
+                SELECT 
+                    COUNT(*) as player_count,
+                    COALESCE(SUM(defeated), 0) as total_defeated,
+                    COALESCE(AVG(damage), 0) as avg_damage
+                FROM youngbuffalo_stats
+                WHERE match_date = ?
+            """, (match_date,)).fetchone()
+            
+            # Calculate enemy stats
+            enemy_stats = cursor.execute("""
+                SELECT 
+                    COUNT(*) as player_count,
+                    COALESCE(SUM(defeated), 0) as total_defeated,
+                    COALESCE(AVG(damage), 0) as avg_damage
+                FROM enemy_all_stats
+                WHERE match_date = ?
+            """, (match_date,)).fetchone()
+            
+            # Insert or replace match group
+            cursor.execute("""
+                INSERT OR REPLACE INTO match_groups (
+                    match_date,
+                    yb_player_count,
+                    enemy_player_count,
+                    yb_total_defeated,
+                    enemy_total_defeated,
+                    yb_avg_damage,
+                    enemy_avg_damage,
+                    has_yb_data,
+                    has_enemy_data,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                match_date,
+                yb_stats[0], enemy_stats[0],
+                yb_stats[1], enemy_stats[1],
+                yb_stats[2], enemy_stats[2],
+                1 if yb_stats[0] > 0 else 0,
+                1 if enemy_stats[0] > 0 else 0
+            ))
+            count += 1
+        
+        self.conn.commit()
+        print(f"[OK] Updated {count} match groups")
+        return count
+    
+    def get_match_by_date(self, match_date: str, team: str = 'both') -> dict:
+        """
+        Get all match data for a specific date.
+        
+        Args:
+            match_date: Date in YYYYMMDD format
+            team: Which team data to retrieve ('yb', 'enemy', or 'both')
+        
+        Returns:
+            Dictionary with match data and metadata
+        """
+        if not self.conn:
+            self.connect()
+        
+        result = {'match_date': match_date}
+        
+        # Get match group metadata
+        group = self.query(f"SELECT * FROM match_groups WHERE match_date = '{match_date}'")
+        if not group.empty:
+            result['metadata'] = group.iloc[0].to_dict()
+        
+        # Get YB data
+        if team in ['yb', 'both']:
+            yb_data = self.query(f"SELECT * FROM youngbuffalo_stats WHERE match_date = '{match_date}'")
+            result['yb_data'] = yb_data
+        
+        # Get enemy data
+        if team in ['enemy', 'both']:
+            enemy_data = self.query(f"SELECT * FROM enemy_all_stats WHERE match_date = '{match_date}'")
+            result['enemy_data'] = enemy_data
+        
+        return result
+    
+    def list_all_match_dates(self, order: str = 'DESC') -> pd.DataFrame:
+        """
+        List all match dates with summary statistics.
+        
+        Args:
+            order: Sort order ('ASC' or 'DESC')
+        
+        Returns:
+            DataFrame with match dates and statistics
+        """
+        if not self.conn:
+            self.connect()
+        
+        query = f"""
+            SELECT 
+                match_date,
+                yb_player_count,
+                enemy_player_count,
+                yb_total_defeated,
+                enemy_total_defeated,
+                ROUND(yb_avg_damage, 2) as yb_avg_damage,
+                ROUND(enemy_avg_damage, 2) as enemy_avg_damage,
+                has_yb_data,
+                has_enemy_data,
+                created_at,
+                updated_at
+            FROM match_groups
+            ORDER BY match_date {order}
+        """
+        
+        return self.query(query)
 
 
 def create_player_stats_schema(db: DataAnalysisDB) -> None:
@@ -209,4 +400,4 @@ def create_player_stats_schema(db: DataAnalysisDB) -> None:
             cursor.execute(statement)
     
     db.conn.commit()
-    print("✓ Created player_stats schema with indexes")
+    print("[OK] Created player_stats schema with indexes")

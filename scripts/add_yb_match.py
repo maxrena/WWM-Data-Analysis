@@ -6,6 +6,7 @@ This script:
 2. Creates a dated table (e.g., yb_stats_20260119)
 3. Adds the data to the master youngbuffalo_stats table with the match date
 4. Updates the yb_stats VIEW to show the latest match data
+5. Updates match groups index for easy date-based lookup
 
 Usage:
     python scripts/add_yb_match.py <csv_file> [date]
@@ -18,6 +19,9 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+
+# Add src to path for database module
+sys.path.append(str(Path(__file__).parent.parent / 'src'))
 
 def add_yb_match(csv_file: str, match_date: str = None):
     """
@@ -120,6 +124,15 @@ def add_yb_match(csv_file: str, match_date: str = None):
         """)
         
         conn.commit()
+        
+        # Update match groups
+        print(f"\n📑 Updating match groups index...")
+        from database import DataAnalysisDB
+        db = DataAnalysisDB()
+        db.connect()
+        db.create_match_groups_table()
+        db.update_match_groups()
+        db.close()
         
         # Show summary
         print(f"\n" + "="*60)

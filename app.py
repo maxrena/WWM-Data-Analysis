@@ -1,7 +1,7 @@
 """
 WWM Data Analysis Dashboard
 Interactive web application for analyzing player statistics
-Version 1.3 - Fixed Streamlit deprecation warnings (use_container_width -> width)
+Version 1.4 - Added Match Groups for date-based match indexing and lookup
 """
 
 import streamlit as st
