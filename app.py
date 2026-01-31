@@ -1,7 +1,7 @@
 """
 WWM Data Analysis Dashboard
 Interactive web application for analyzing player statistics
-Version 1.4 - Added Match Groups for date-based match indexing and lookup
+Version 1.5 - Removed CSV functionality, OCR-only data extraction
 """
 
 import streamlit as st
@@ -200,7 +200,7 @@ def extract_data_from_image(image):
 
 # Page configuration
 st.set_page_config(
-    page_title="WWM Data Analysis Dashboard v1.2",
+    page_title="WWM Data Analysis Dashboard v1.5",
     page_icon="⚔️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -301,10 +301,10 @@ def get_available_matches():
         return temp_db.query(query)
 
 # Header
-st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.2</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.5</p>', unsafe_allow_html=True)
 
 # Sidebar
-st.sidebar.title("🎮 WWM Data Analysis v1.2")
+st.sidebar.title("🎮 WWM Data Analysis v1.5")
 st.sidebar.divider()
 
 # Match selector in sidebar
@@ -872,24 +872,6 @@ with extractor_tab:
         
         st.markdown("---")
         
-        # CSV Upload as alternative
-        st.subheader("📁 Or Upload CSV Files Directly")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            yb_csv = st.file_uploader("YB Team CSV", type=['csv'], key="yb_csv")
-            if yb_csv:
-                st.session_state.yb_data = pd.read_csv(yb_csv)
-                st.success("✅ YB Team data loaded from CSV")
-        
-        with col2:
-            enemy_csv = st.file_uploader("Enemy Team CSV", type=['csv'], key="enemy_csv")
-            if enemy_csv:
-                st.session_state.enemy_data = pd.read_csv(enemy_csv)
-                st.success("✅ Enemy Team data loaded from CSV")
-        
-        st.markdown("---")
-        
         # OCR Extraction Button
         st.subheader("🤖 Extract Data with OCR")
         
@@ -1030,30 +1012,9 @@ with extractor_tab:
             # Save options
             st.subheader("💾 Save Options")
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("📥 Download as CSV", width='stretch'):
-                    if has_yb:
-                        csv_yb = st.session_state.yb_data.to_csv(index=False)
-                        st.download_button(
-                            "⬇️ Download YB Team CSV",
-                            csv_yb,
-                            f"yb_team_{st.session_state.match_id}.csv",
-                            "text/csv",
-                            width='stretch'
-                        )
-                    if has_enemy:
-                        csv_enemy = st.session_state.enemy_data.to_csv(index=False)
-                        st.download_button(
-                            "⬇️ Download Enemy Team CSV",
-                            csv_enemy,
-                            f"enemy_team_{st.session_state.match_id}.csv",
-                            "text/csv",
-                            width='stretch'
-                        )
-            
-            with col2:
                 if st.button("💾 Save to Database", type="primary", width='stretch'):
                     try:
                         db_path = Path('data/analysis.db')
@@ -1134,7 +1095,7 @@ with extractor_tab:
                     except Exception as e:
                         st.error(f"❌ Error saving to database: {e}")
             
-            with col3:
+            with col2:
                 if st.button("🗑️ Clear Data", width='stretch'):
                     st.session_state.yb_data = None
                     st.session_state.enemy_data = None
@@ -1146,6 +1107,6 @@ with extractor_tab:
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Analysis Dashboard v1.2 | Built with Streamlit
+        WWM Data Analysis Dashboard v1.5 | Built with Streamlit
     </div>
 """, unsafe_allow_html=True)

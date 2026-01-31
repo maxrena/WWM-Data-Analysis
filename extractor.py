@@ -1,5 +1,5 @@
 """
-WWM Match Data Extractor - Version 1.4
+WWM Match Data Extractor - Version 1.5
 Drag-and-drop interface for extracting player statistics from game screenshots
 """
 
@@ -198,22 +198,6 @@ elif page == "Upload & Extract":
                 })
     
     st.markdown("---")
-    
-    # CSV Upload as alternative
-    st.subheader("📁 Or Upload CSV Files Directly")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        yb_csv = st.file_uploader("YB Team CSV", type=['csv'], key="yb_csv")
-        if yb_csv:
-            st.session_state.yb_data = pd.read_csv(yb_csv)
-            st.success("✅ YB Team data loaded from CSV")
-    
-    with col2:
-        enemy_csv = st.file_uploader("Enemy Team CSV", type=['csv'], key="enemy_csv")
-        if enemy_csv:
-            st.session_state.enemy_data = pd.read_csv(enemy_csv)
-            st.success("✅ Enemy Team data loaded from CSV")
 
 elif page == "Review & Save":
     st.header("📊 Review & Save Match Data")
@@ -272,30 +256,9 @@ elif page == "Review & Save":
         # Save options
         st.subheader("💾 Save Options")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📥 Download as CSV", width='stretch'):
-                if has_yb:
-                    csv_yb = st.session_state.yb_data.to_csv(index=False)
-                    st.download_button(
-                        "⬇️ Download YB Team CSV",
-                        csv_yb,
-                        f"yb_team_{st.session_state.match_id}.csv",
-                        "text/csv",
-                        width='stretch'
-                    )
-                if has_enemy:
-                    csv_enemy = st.session_state.enemy_data.to_csv(index=False)
-                    st.download_button(
-                        "⬇️ Download Enemy Team CSV",
-                        csv_enemy,
-                        f"enemy_team_{st.session_state.match_id}.csv",
-                        "text/csv",
-                        width='stretch'
-                    )
-        
-        with col2:
             if st.button("💾 Save to Database", type="primary", width='stretch'):
                 try:
                     db_path = Path('data/analysis.db')
@@ -384,7 +347,7 @@ elif page == "Review & Save":
                 except Exception as e:
                     st.error(f"❌ Error saving to database: {e}")
         
-        with col3:
+        with col2:
             if st.button("🗑️ Clear Data", width='stretch'):
                 st.session_state.yb_data = None
                 st.session_state.enemy_data = None

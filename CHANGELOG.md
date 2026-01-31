@@ -2,6 +2,26 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.5.0] - 2026-01-30
+
+### Removed
+- **CSV Functionality Completely Removed**
+  - Removed CSV upload feature from app.py and extractor.py
+  - Removed CSV download feature from app.py and extractor.py
+  - Deleted CSV-related script files:
+    - `scripts/add_match.py`
+    - `scripts/add_yb_match.py`
+    - `scripts/add_enemy_match.py`
+    - `scripts/load_to_database.py`
+    - `scripts/add_match_data.py`
+  - Removed all CSV data files from data/raw/
+
+### Changed
+- **Simplified Data Input**
+  - OCR-only data extraction workflow
+  - Streamlined user interface without CSV options
+  - Reduced complexity in data ingestion process
+
 ## [1.4.0] - 2026-01-27
 
 ### Added

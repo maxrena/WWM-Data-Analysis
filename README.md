@@ -1,8 +1,8 @@
 # WWM Data Analysis Project
 
-**Version 1.4** - Match Groups & Date-Based Indexing
+**Version 1.5** - OCR-Only Data Extraction
 
-A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and drag-and-drop data extraction capabilities.
+A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and OCR-based data extraction capabilities.
 
 ## Project Structure
 
