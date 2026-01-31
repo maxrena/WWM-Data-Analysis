@@ -1,5 +1,5 @@
 """
-WWM Match Data Extractor - Version 1.5
+WWM Match Data Extractor - Version 1.6
 Drag-and-drop interface for extracting player statistics from game screenshots
 """
 

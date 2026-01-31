@@ -1,6 +1,6 @@
 # WWM Data Analysis Project
 
-**Version 1.5** - OCR-Only Data Extraction
+**Version 1.6** - Multiple Match Support & Database Optimization
 
 A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and OCR-based data extraction capabilities.
 

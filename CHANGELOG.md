@@ -2,6 +2,23 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.6.0] - 2026-01-31
+
+### Added
+- **Multiple Match Support**
+  - Support for multiple matches on the same date with distinct match IDs
+  - Match ID format: YYYYMMDD_## (e.g., 20260117_01, 20260117_02)
+
+### Changed
+- **Database Schema Optimization**
+  - Updated UNIQUE constraint from (match_date, player_name) to (match_id, player_name)
+  - Allows unlimited matches per date while preventing duplicates within a match
+  - Improved scalability for future match additions
+
+### Fixed
+- Resolved constraint conflicts preventing multiple same-date matches
+- Optimized database structure for multi-match scenarios
+
 ## [1.5.0] - 2026-01-30
 
 ### Removed
