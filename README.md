@@ -1,6 +1,6 @@
 # WWM Data Analysis Project
 
-**Version 1.6** - Multiple Match Support & Database Optimization
+**Version 1.7 (Stable)** - Unified Match Ingestion & Template Generator
 
 A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and OCR-based data extraction capabilities.
 

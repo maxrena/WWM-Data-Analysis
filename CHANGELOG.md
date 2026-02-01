@@ -2,6 +2,11 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.7.0] - 2026-02-01
+### Stable
+- Unified match ingestion with consistent schema and match IDs
+- Added JSON template generator for match extraction
+
 ## [1.6.0] - 2026-01-31
 
 ### Added

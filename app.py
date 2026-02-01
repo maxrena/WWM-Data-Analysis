@@ -28,6 +28,7 @@ from streamlit_paste_button import paste_image_button as pbutton
 # Add src to path
 sys.path.append(str(Path(__file__).parent / 'src'))
 from database import DataAnalysisDB
+from match_ingest import normalize_match_id, insert_team_stats
 
 # Initialize EasyOCR reader (cached to avoid reloading)
 @st.cache_resource
@@ -200,7 +201,7 @@ def extract_data_from_image(image):
 
 # Page configuration
 st.set_page_config(
-    page_title="WWM Data Analysis Dashboard v1.6",
+    page_title="WWM Data Analysis Dashboard v1.7",
     page_icon="⚔️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -292,19 +293,20 @@ def get_available_matches():
     """Get list of available match dates and IDs from database"""
     with DataAnalysisDB('data/analysis.db') as temp_db:
         query = """
-        SELECT DISTINCT match_id,
-               substr(match_id, 1, 4) || '-' || substr(match_id, 5, 2) || '-' || substr(match_id, 7, 2) || ' ' ||
-               substr(match_id, 10, 2) || ':' || substr(match_id, 12, 2) || ':' || substr(match_id, 14, 2) as match_datetime
-        FROM youngbuffalo_stats
+     SELECT DISTINCT match_id,
+         substr(match_id, 1, 4) || '-' || substr(match_id, 5, 2) || '-' || substr(match_id, 7, 2) ||
+         ' Match ' || substr(match_id, 10, 2) as match_label
+     FROM youngbuffalo_stats
+     WHERE length(match_id) = 11 AND substr(match_id, 9, 1) = '_'
         ORDER BY match_id DESC
         """
         return temp_db.query(query)
 
 # Header
-st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.6</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.7</p>', unsafe_allow_html=True)
 
 # Sidebar
-st.sidebar.title("🎮 WWM Data Analysis v1.6")
+st.sidebar.title("🎮 WWM Data Analysis v1.7")
 st.sidebar.divider()
 
 # Match selector in sidebar
@@ -313,7 +315,7 @@ available_matches = get_available_matches()
 
 if len(available_matches) > 0:
     match_options = ["Latest Match (All Data)"] + [
-        f"{row['match_datetime']}" for _, row in available_matches.iterrows()
+        f"{row['match_label']}" for _, row in available_matches.iterrows()
     ]
     
     selected_option = st.sidebar.selectbox(
@@ -326,7 +328,6 @@ if len(available_matches) > 0:
         st.session_state.selected_match_id = None
         st.sidebar.info("📊 Viewing latest data from all matches")
     else:
-        # Extract match_id from the selected datetime string
         selected_index = match_options.index(selected_option) - 1
         st.session_state.selected_match_id = available_matches.iloc[selected_index]['match_id']
         st.sidebar.success(f"🎯 Viewing Match: {st.session_state.selected_match_id}")
@@ -689,17 +690,19 @@ with extractor_tab:
             match_date_str = match_date.strftime('%Y%m%d')
         
         with col2:
-            match_time = st.time_input(
-                "Match Time (optional)",
-                value=datetime.now().time(),
-                help="Time of the match for unique identification"
+            match_session = st.number_input(
+                "Match Session",
+                min_value=1,
+                max_value=99,
+                value=1,
+                step=1,
+                help="Session number for the selected date (01, 02, 03, etc.)"
             )
-            match_time_str = match_time.strftime('%H%M%S')
         
         # Generate match ID
-        match_id = f"{match_date_str}_{match_time_str}"
-        st.session_state.match_id = match_id
-        st.info(f"📋 Match ID: `{match_id}`")
+        match_id = normalize_match_id(match_date_str, match_session)
+        st.session_state.match_id = match_id.value()
+        st.info(f"📋 Match ID: `{st.session_state.match_id}`")
         
         st.markdown("---")
         
@@ -1022,37 +1025,20 @@ with extractor_tab:
                         conn = sqlite3.connect(db_path, check_same_thread=False)
                         cursor = conn.cursor()
                         
-                        match_date = st.session_state.match_id.split('_')[0]
+                        match_date, match_session = st.session_state.match_id.split('_')
+                        match_id = normalize_match_id(match_date, match_session)
                         
                         # Save YB team
                         if has_yb:
-                            # Add to master table
                             df_yb = st.session_state.yb_data.copy()
-                            df_yb['match_date'] = match_date
-                            df_yb['match_id'] = st.session_state.match_id
-                            
-                            df_yb.to_sql('youngbuffalo_stats', conn, if_exists='append', index=False)
-                            
-                            # Create dated table
-                            dated_table = f"yb_stats_{st.session_state.match_id}"
-                            st.session_state.yb_data.to_sql(dated_table, conn, if_exists='replace', index=False)
-                            
-                            st.success(f"✅ YB team data saved to database")
+                            insert_team_stats(conn, "yb", match_id, df_yb)
+                            st.success("✅ YB team data saved to database")
                         
                         # Save Enemy team
                         if has_enemy:
-                            # Add to master table
                             df_enemy = st.session_state.enemy_data.copy()
-                            df_enemy['match_date'] = match_date
-                            df_enemy['match_id'] = st.session_state.match_id
-                            
-                            df_enemy.to_sql('enemy_all_stats', conn, if_exists='append', index=False)
-                            
-                            # Create dated table
-                            dated_table = f"enemy_stats_{st.session_state.match_id}"
-                            st.session_state.enemy_data.to_sql(dated_table, conn, if_exists='replace', index=False)
-                            
-                            st.success(f"✅ Enemy team data saved to database")
+                            insert_team_stats(conn, "enemy", match_id, df_enemy)
+                            st.success("✅ Enemy team data saved to database")
                         
                         # Update VIEWs
                         if has_yb:
@@ -1107,6 +1093,6 @@ with extractor_tab:
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Analysis Dashboard v1.6 | Built with Streamlit
+        WWM Data Analysis Dashboard v1.7 | Built with Streamlit
     </div>
 """, unsafe_allow_html=True)
