@@ -81,7 +81,7 @@ def main():
     
     # Load player data from JSON file
     if args.json_file:
-        with open(args.json_file, 'r') as f:
+        with open(args.json_file, 'r', encoding='utf-8') as f:
             payload = json.load(f)
     else:
         print("Error: --json-file is required")

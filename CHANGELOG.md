@@ -2,6 +2,9 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.7.1] - 2026-02-01
+- Added match 04 data (YB + Enemy) for 2026-01-18
+
 ## [1.7.0] - 2026-02-01
 ### Stable
 - Unified match ingestion with consistent schema and match IDs
