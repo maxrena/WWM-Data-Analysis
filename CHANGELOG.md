@@ -2,6 +2,12 @@
 
 All notable changes to WWM Data Analysis project will be documented in this file.
 
+## [1.7.2] - 2026-02-24
+### Changed
+- Updated project version metadata and UI labels to v1.7.2
+- Updated README and DATABASE docs to match current JSON/session-based ingestion workflow
+- Added explicit multi-device sync guidance for tracked `data/analysis.db`
+
 ## [1.7.1] - 2026-02-01
 - Added match 04 data (YB + Enemy) for 2026-01-18
 

@@ -2,7 +2,7 @@
 # This script helps you launch the different components
 
 Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "   WWM Data Analysis v1.2 - Application Launcher   " -ForegroundColor Cyan
+Write-Host "  WWM Data Analysis v1.7.2 - Application Launcher   " -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -13,7 +13,7 @@ Write-Host "Activating virtual environment..." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Select application to launch:" -ForegroundColor Green
 Write-Host ""
-Write-Host "  1. Data Extractor (Upload & extract match data)" -ForegroundColor White
+Write-Host "  1. Data Extractor (Legacy standalone extractor)" -ForegroundColor White
 Write-Host "     Port: 8502" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  2. Main Dashboard (View statistics & analytics)" -ForegroundColor White

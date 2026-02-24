@@ -3,6 +3,7 @@
 ## Overview
 
 The database uses a **master table + dated snapshots** architecture to track match history over time.
+Current primary identity is `match_id` in format `YYYYMMDD_##` (date + session number).
 
 ## Table Structure
 
@@ -10,15 +11,15 @@ The database uses a **master table + dated snapshots** architecture to track mat
 
 1. **youngbuffalo_stats** (Master Table)
    - Contains ALL match data from all dates
-   - Columns: `id`, `match_date`, `player_name`, `defeated`, `assist`, `defeated_2`, `fun_coin`, `damage`, `tank`, `heal`, `siege_damage`
+   - Columns: `id`, `match_date`, `match_id`, `player_name`, `defeated`, `assist`, `defeated_2`, `fun_coin`, `damage`, `tank`, `heal`, `siege_damage`
    - Primary key: `id` (auto-increment)
-   - Indexed on: `match_date`
+   - Indexed on: `match_date`, `match_id`
 
-2. **yb_stats_YYYYMMDD** (Dated Snapshots)
-   - Individual tables for each match date
-   - Example: `yb_stats_20260118`, `yb_stats_20260119`
-   - Contains only data from that specific date
-   - No `match_date` column (date is in table name)
+2. **yb_stats_YYYYMMDD_##** (Session Snapshots)
+   - Individual tables for each match session
+   - Example: `yb_stats_20260118_01`, `yb_stats_20260118_04`
+   - Contains only data from that specific match session
+   - Includes `match_date`, `match_session`, and `team`
 
 3. **yb_stats** (VIEW)
    - Virtual table showing the LATEST match
@@ -30,11 +31,11 @@ The database uses a **master table + dated snapshots** architecture to track mat
 1. **enemy_all_stats** (Master Table)
    - Contains ALL enemy match data from all dates
    - Same structure as `youngbuffalo_stats`
-   - Columns: `id`, `match_date`, `player_name`, `defeated`, `assist`, `defeated_2`, `fun_coin`, `damage`, `tank`, `heal`, `siege_damage`
+   - Columns: `id`, `match_date`, `match_id`, `player_name`, `defeated`, `assist`, `defeated_2`, `fun_coin`, `damage`, `tank`, `heal`, `siege_damage`
 
-2. **enemy_stats_YYYYMMDD** (Dated Snapshots)
-   - Individual tables for each match date
-   - Example: `enemy_stats_20260118`, `enemy_stats_20260119`
+2. **enemy_stats_YYYYMMDD_##** (Session Snapshots)
+   - Individual tables for each match session
+   - Example: `enemy_stats_20260118_01`, `enemy_stats_20260118_04`
 
 3. **enemy_stats** (VIEW)
    - Virtual table showing the LATEST enemy match
@@ -45,41 +46,35 @@ The database uses a **master table + dated snapshots** architecture to track mat
 ### For YB Team
 
 ```bash
-python scripts/add_yb_match.py <csv_file> [YYYYMMDD]
+python scripts/generic_match_insert.py --match-date YYYYMMDD --match-id 01 --team yb --json-file <path-to-json>
 ```
 
 **Examples:**
 ```bash
-# Use today's date
-python scripts/add_yb_match.py data/yb_team_new.csv
-
-# Specify date
-python scripts/add_yb_match.py data/yb_team_20260119.csv 20260119
+# Match session 04 on 20260118
+python scripts/generic_match_insert.py --match-date 20260118 --match-id 04 --team yb --json-file outputs/templates/20260118_04_yb.json
 ```
 
 **What it does:**
-1. Creates `yb_stats_YYYYMMDD` table
-2. Adds data to `youngbuffalo_stats` master table with `match_date`
+1. Creates `yb_stats_YYYYMMDD_##` table
+2. Adds data to `youngbuffalo_stats` master table with `match_date` and `match_id`
 3. Updates `yb_stats` VIEW to show the latest match
 
 ### For Enemy Team
 
 ```bash
-python scripts/add_enemy_match.py <csv_file> [YYYYMMDD]
+python scripts/generic_match_insert.py --match-date YYYYMMDD --match-id 01 --team enemy --json-file <path-to-json>
 ```
 
 **Examples:**
 ```bash
-# Use today's date
-python scripts/add_enemy_match.py data/enemy_team_new.csv
-
-# Specify date
-python scripts/add_enemy_match.py data/enemy_team_20260119.csv 20260119
+# Match session 04 on 20260118
+python scripts/generic_match_insert.py --match-date 20260118 --match-id 04 --team enemy --json-file outputs/templates/20260118_04_enemy.json
 ```
 
 **What it does:**
-1. Creates `enemy_stats_YYYYMMDD` table
-2. Adds data to `enemy_all_stats` master table with `match_date`
+1. Creates `enemy_stats_YYYYMMDD_##` table
+2. Adds data to `enemy_all_stats` master table with `match_date` and `match_id`
 3. Updates `enemy_stats` VIEW to show the latest match
 
 ## Migration
@@ -108,11 +103,11 @@ SELECT * FROM enemy_stats;
 
 ### Get Specific Match
 ```sql
--- YB Team for specific date
-SELECT * FROM youngbuffalo_stats WHERE match_date = '20260118';
+-- YB Team for specific match session
+SELECT * FROM youngbuffalo_stats WHERE match_id = '20260118_04';
 
--- Or use the dated table directly
-SELECT * FROM yb_stats_20260118;
+-- Or use the session table directly
+SELECT * FROM yb_stats_20260118_04;
 ```
 
 ### Get All Matches
@@ -158,6 +153,36 @@ ORDER BY match_date DESC;
 ## Dashboard Compatibility
 
 The dashboard uses `yb_stats` and `enemy_stats` VIEWs, which automatically show the latest match data. No code changes needed!
+
+## Multi-Device Sync (Tracked `analysis.db`)
+
+This repository tracks `data/analysis.db` so database updates can be shared across devices via Git.
+
+### Recommended Workflow
+
+1. Before adding or editing match data on a device:
+```bash
+git pull
+```
+
+2. After saving new match data:
+```bash
+git add data/analysis.db
+git commit -m "Update match database"
+git push
+```
+
+3. On other devices:
+```bash
+git pull
+```
+
+### Conflict Prevention Tips
+
+- Avoid writing to the DB on multiple devices at the same time.
+- Always pull before opening the app and saving new match data.
+- Push frequently in small, logical updates.
+- If a conflict occurs, keep one DB version (`--ours` or `--theirs`) and re-apply missing matches.
 
 ## CSV File Format
 

@@ -1,6 +1,6 @@
 # WWM Data Analysis Project
 
-**Version 1.7.1** - Match 04 data added (YB + Enemy)
+**Version 1.7.2** - Documentation and sync workflow updates
 
 A comprehensive match analysis dashboard for WWM game statistics with interactive visualizations, PDF reporting, and OCR-based data extraction capabilities.
 
@@ -10,7 +10,7 @@ A comprehensive match analysis dashboard for WWM game statistics with interactiv
 WWM Data Analysis/
 │
 ├── data/
-│   ├── raw/                    # Raw CSV data files (player stats)
+│   ├── raw/                    # Optional raw/source files
 │   └── analysis.db             # SQLite database
 │
 ├── notebooks/                  # Jupyter notebooks for analysis
@@ -28,11 +28,10 @@ WWM Data Analysis/
 │   └── config.py              # Configuration settings
 │
 ├── scripts/                    # Utility scripts
-│   ├── load_to_database.py    # Load CSV to database
 │   ├── download_fonts.py      # Download Unicode fonts
-│   ├── add_yb_match.py        # Add new YB team match data
-│   ├── add_enemy_match.py     # Add new enemy team match data
-│   ├── add_match.py           # Add both teams' match data
+│   ├── generate_match_template.py # Generate JSON template for a match session
+│   ├── generic_match_insert.py # Insert YB/enemy match JSON into DB
+│   ├── manage_match_groups.py  # Build/update date-based match index
 │   └── migrate_enemy_stats.py # Migrate enemy_stats to master table
 │
 ├── fonts/                      # DejaVu Unicode fonts for PDF
@@ -42,7 +41,7 @@ WWM Data Analysis/
 │   └── reports/               # Generated reports
 │
 ├── app.py                     # Streamlit dashboard application
-├── extractor.py               # v1.2 Data extraction UI (drag & drop)
+├── extractor.py               # Legacy standalone extractor (primary flow is in app.py)
 ├── watch.ps1                  # Auto-reload development script
 ├── requirements.txt           # Python dependencies
 ├── .gitignore                # Git ignore rules
@@ -53,7 +52,7 @@ WWM Data Analysis/
 ## Features
 
 - **🆕 Drag & Drop Data Extraction**: Upload game screenshots and extract player statistics (v1.2)
-- **🆕 Multiple Matches Per Day**: Track multiple matches with unique match IDs (v1.2)
+- **🆕 Multiple Matches Per Day**: Track multiple matches with session-based IDs (`YYYYMMDD_##`)
 - **🆕 Match Groups**: Date-based indexing for easy match lookup and comparison (v1.4)
 - **Interactive Web Dashboard**: Streamlit-based UI with 4 different analysis views
 - **SQLite Database**: Efficient data storage with indexed queries and match history tracking
@@ -97,20 +96,20 @@ WWM Data Analysis/
 
 ### Running the Applications
 
-**Option 1: Data Extractor (NEW in v1.2)**
-```powershell
-streamlit run extractor.py --server.port=8502
-```
-- Drag and drop game screenshots
-- Extract player statistics (manual entry for now, OCR coming soon)
-- Upload CSV files directly
-- Save matches with unique IDs (supports multiple matches per day)
-- Access at `http://localhost:8502`
-
-**Option 2: Main Dashboard**
+**Option 1 (Recommended): Main Dashboard + Integrated Extractor**
 ```powershell
 streamlit run app.py
 ```
+- Dashboard and extractor live in one app
+- Extract data via OCR/manual review inside the `📸 Data Extractor` tab
+- Access at `http://localhost:8501`
+
+**Option 2: Legacy Standalone Extractor**
+```powershell
+streamlit run extractor.py --server.port=8502
+```
+- Manual extractor flow kept for compatibility
+- Access at `http://localhost:8502`
 
 Or use the auto-reload watch script:
 ```powershell
@@ -125,6 +124,36 @@ Or use the auto-reload watch script:
    - **YB Team Stats**: Detailed YB team analysis
    - **Enemy Team Stats**: Detailed enemy team analysis
    - **Head-to-Head Comparison**: Direct team comparisons
+
+## Multi-Device Database Sync (Tracked `analysis.db`)
+
+This repository tracks `data/analysis.db` so you can use your latest data from any machine.
+
+### Recommended Workflow
+
+1. **Before adding new data on a device**
+   ```powershell
+   git pull
+   ```
+
+2. **After saving new match data**
+   ```powershell
+   git add data/analysis.db
+   git commit -m "Update match database"
+   git push
+   ```
+
+3. **On your other device**
+   ```powershell
+   git pull
+   ```
+
+### Conflict Prevention Tips
+
+- Avoid editing/inserting match data on multiple devices at the same time.
+- Always `git pull` before opening the app and writing to the database.
+- Push database updates frequently in small commits.
+- If a DB conflict happens, keep one version (`--ours` or `--theirs`), then re-apply missing entries from the app.
 
 ## Version 1.2 Features
 
@@ -233,19 +262,19 @@ See [DATABASE.md](DATABASE.md) for more examples and SQL queries.
 
 ### Adding New Match Data
 
-**Add both teams at once:**
+**Generate a template:**
 ```powershell
-python scripts/add_match.py data/yb_20260119.csv data/enemy_20260119.csv 20260119
+python scripts/generate_match_template.py --match-date 20260118 --match-session 04 --team yb --players 30
 ```
 
-**Add YB team only:**
+**Insert team data JSON:**
 ```powershell
-python scripts/add_yb_match.py data/yb_20260119.csv 20260119
+python scripts/generic_match_insert.py --match-date 20260118 --match-id 04 --team yb --json-file outputs/templates/20260118_04_yb.json
 ```
 
-**Add enemy team only:**
+**Update date-based index:**
 ```powershell
-python scripts/add_enemy_match.py data/enemy_20260119.csv 20260119
+python scripts/manage_match_groups.py
 ```
 
 The scripts will:
@@ -263,9 +292,9 @@ The scripts will:
    jupyter notebook
    ```
 
-2. Load data into database:
+2. Run the app and use the integrated extractor tab:
    ```powershell
-   python scripts/load_to_database.py
+   streamlit run app.py
    ```
 
 3. Or use the modules in your own scripts:
@@ -392,12 +421,12 @@ The PDF export feature generates comprehensive reports including:
 To add a new match to the history:
 
 ```powershell
-python scripts/add_match_data.py data/raw/new_match.csv 20260125
+python scripts/generic_match_insert.py --match-date 20260125 --match-id 01 --team yb --json-file <path-to-json>
 ```
 
 This will:
-- Add data to the master `youngbuffalo_stats` table
-- Create a date-specific table (e.g., `yb_stats_20260125`)
+- Add data to aggregate team tables (`youngbuffalo_stats` / `enemy_all_stats`)
+- Create a session-specific table (e.g., `yb_stats_20260125_01`)
 - Update the `yb_stats` view to show the latest match
 
 **yb_stats_YYYYMMDD** (Individual match tables)

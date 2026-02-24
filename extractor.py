@@ -1,6 +1,6 @@
 """
-WWM Match Data Extractor - Version 1.6
-Drag-and-drop interface for extracting player statistics from game screenshots
+WWM Match Data Extractor (Legacy) - Version 1.7.2
+Standalone manual extractor kept for compatibility. Primary extractor lives in app.py.
 """
 
 import streamlit as st
@@ -19,7 +19,7 @@ from database import DataAnalysisDB
 
 # Page configuration
 st.set_page_config(
-    page_title="WWM Data Extractor v1.2",
+    page_title="WWM Data Extractor (Legacy) v1.7.2",
     page_icon="📸",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -71,7 +71,7 @@ if 'extraction_method' not in st.session_state:
     st.session_state.extraction_method = 'manual'
 
 # Header
-st.markdown('<p class="main-header">📸 WWM Match Data Extractor v1.2</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">📸 WWM Match Data Extractor (Legacy) v1.7.2</p>', unsafe_allow_html=True)
 
 # Sidebar navigation
 st.sidebar.title("🎮 Navigation")
@@ -358,7 +358,7 @@ elif page == "Review & Save":
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Extractor v1.2 | Build comprehensive match database with ease
+        WWM Data Extractor (Legacy) v1.7.2 | Build comprehensive match database with ease
     </div>
 """, unsafe_allow_html=True)
 

@@ -201,7 +201,7 @@ def extract_data_from_image(image):
 
 # Page configuration
 st.set_page_config(
-    page_title="WWM Data Analysis Dashboard v1.7.1",
+    page_title="WWM Data Analysis Dashboard v1.7.2",
     page_icon="⚔️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -303,10 +303,10 @@ def get_available_matches():
         return temp_db.query(query)
 
 # Header
-st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.7.1</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">⚔️ WWM Match Analysis Dashboard v1.7.2</p>', unsafe_allow_html=True)
 
 # Sidebar
-st.sidebar.title("🎮 WWM Data Analysis v1.7.1")
+st.sidebar.title("🎮 WWM Data Analysis v1.7.2")
 st.sidebar.divider()
 
 # Match selector in sidebar
@@ -1093,6 +1093,6 @@ with extractor_tab:
 st.divider()
 st.markdown("""
     <div style='text-align: center; color: gray; padding: 1rem;'>
-        WWM Data Analysis Dashboard v1.7.1 | Built with Streamlit
+        WWM Data Analysis Dashboard v1.7.2 | Built with Streamlit
     </div>
 """, unsafe_allow_html=True)
